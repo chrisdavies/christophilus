@@ -2,4 +2,4 @@
 
 dist/
 notes/
-
+node_modules/
