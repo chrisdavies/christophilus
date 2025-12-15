@@ -31,9 +31,8 @@ function postTemplate(
 </head>
 <body>
   <nav class="site-nav">
-    <a href="../../" class="logo"><img src="../../games/favicon.svg" alt="Home"></a>
+    <a href="../../" class="logo"><img src="../../games/favicon.svg" alt="Games"></a>
     <a href="../" class="current">Blog</a>
-    <a href="../../games/">Games</a>
   </nav>
   <article>
     <header>
@@ -66,9 +65,8 @@ function indexTemplate(posts: { title: string; date: string; slug: string }[]): 
 </head>
 <body>
   <nav class="site-nav">
-    <a href="../" class="logo"><img src="../games/favicon.svg" alt="Home"></a>
+    <a href="../" class="logo"><img src="../games/favicon.svg" alt="Games"></a>
     <a href="./" class="current">Blog</a>
-    <a href="../games/">Games</a>
   </nav>
   <main>
     <h1>Blog</h1>
@@ -93,6 +91,7 @@ await mkdir(`${DIST}/blog/posts`, { recursive: true });
 
 // Copy static files
 await cp("./index.html", `${DIST}/index.html`);
+await cp("./index.css", `${DIST}/index.css`);
 await cp("./blog/index.css", `${DIST}/blog/index.css`);
 await cp("./CNAME", `${DIST}/CNAME`).catch(() => {}); // Optional
 

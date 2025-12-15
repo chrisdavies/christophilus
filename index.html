@@ -1,110 +1,45 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Christophilus</title>
-  <link rel="icon" href="./games/favicon.svg">
-  <style>
-    * { box-sizing: border-box; }
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="./games/favicon.svg" />
+    <link rel="stylesheet" href="./index.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Christophilus</title>
+  </head>
+  <body>
+    <nav class="site-nav">
+      <a href="./" class="logo current"><img src="./games/favicon.svg" alt="Home"></a>
+      <a href="./blog/">Blog</a>
+    </nav>
+    <main>
+      <section class="links">
+        <a href="./games/tileflip/">Tileflip</a>
+        <a href="./games/sokoban/">Sokoban</a>
+        <a href="./games/memoji/">Memoji</a>
+        <a href="./games/blockfit/">Blockfit</a>
+        <a href="./games/gamepad-diagnostic/">Gamepad Diagnostic</a>
+      </section>
 
-    :root {
-      --bg: #0f172a;
-      --text: #e2e8f0;
-      --muted: #94a3b8;
-      --accent: #22d3ee;
-    }
+      <script>
+        (function () {
+          const app = document.querySelector('main');
+          if (!app) {
+            return;
+          }
 
-    html {
-      font-family: system-ui, -apple-system, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.6;
-    }
-
-    body {
-      display: flex;
-      flex-direction: column;
-      min-height: 100vh;
-      margin: 0;
-      padding: 0;
-    }
-
-    nav.site-nav {
-      display: flex;
-      align-items: center;
-      gap: 32px;
-      padding: 24px 32px;
-      font-size: 16px;
-      line-height: 1;
-    }
-
-    nav.site-nav .logo {
-      display: flex;
-      width: 32px;
-      height: 32px;
-    }
-
-    nav.site-nav .logo img {
-      width: 100%;
-      height: 100%;
-    }
-
-    nav.site-nav a {
-      color: var(--muted);
-      text-decoration: none;
-    }
-
-    nav.site-nav a:hover {
-      color: var(--accent);
-    }
-
-    nav.site-nav a.current {
-      color: var(--text);
-    }
-
-    main {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      max-width: 500px;
-      margin: 0 auto;
-      padding: 2rem;
-      text-align: center;
-    }
-
-    h1 {
-      font-size: 2.5rem;
-      font-weight: 300;
-      margin: 0 0 1rem;
-    }
-
-    .bio {
-      color: var(--muted);
-      margin: 0;
-    }
-
-    a {
-      color: var(--accent);
-      text-decoration: none;
-    }
-
-    a:hover {
-      text-decoration: underline;
-    }
-  </style>
-</head>
-<body>
-  <nav class="site-nav">
-    <a href="./" class="logo"><img src="./games/favicon.svg" alt="Home"></a>
-    <a href="./blog/">Blog</a>
-    <a href="./games/">Games</a>
-  </nav>
-  <main>
-    <h1>Christophilus</h1>
-    <p class="bio">Software developer. Writer of words. Player of games.</p>
-  </main>
-</body>
+          app.insertAdjacentHTML('afterbegin', `<div class="title-tiles-wrapper">
+            <div class="title-tiles">${
+              'christophilus'
+                .padStart(25, ' ')
+                .padEnd(35, ' ')
+                .split('')
+                .map((ch) => `<div class="title-tile">${ch}</div>`)
+                .join('')
+            }</div>
+          </div>`);
+        }());
+      </script>
+    </main>
+  </body>
 </html>
