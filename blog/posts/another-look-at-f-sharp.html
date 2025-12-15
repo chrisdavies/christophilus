@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Another Look at F# | Christophilus</title>
+  <link rel="icon" href="../../games/favicon.svg">
+  <link rel="stylesheet" href="../index.css">
+</head>
+<body>
+  <nav class="site-nav">
+    <a href="../../" class="logo"><img src="../../games/favicon.svg" alt="Home"></a>
+    <a href="../" class="current">Blog</a>
+    <a href="../../games/">Games</a>
+  </nav>
+  <article>
+    <header>
+      <time datetime="2016-07-26">Jul 26, 2016</time>
+    </header>
+    <h1>Another Look at F#</h1>
+<p>Yesterday, I spent a few hours rewriting a little JavaScript command line utility into F#. I used VSCode with the excellent Ionide plugins.</p>
+<p>Here are some takeaways in no particular order.</p>
+<h2>The good</h2>
+<p>F# is terse but readable. The program ended up being a little more than ½ the size of the JavaScript version. I never had to specify a type, yet I still got excellent intellisense, and accurate errors displayed to me in the editor. In fact, whenever I ridded my code of the little red underlines, it always compiled, and it always worked.</p>
+<p>People in other statically typed languages— including ML derivatives— often think your code is clearer and more maintainable if you at least annotate your function definitions. F# seems to disregard that notion, and does it successfully. I think it gets away with this partly because it is a language that is almost always used with an IDE or a good IDE-like plugin (Ionide). So, if you really can’t understand how to call a function, you can hover your mouse over the function and see its inferred argument and return types. Also, my experience so far is that F# somehow really encourages teeny tiny functions. My biggest function was the “printHelp” function which was 5 lines of code and thoroughly understandable at a glance. Tiny functions are generally understandable (unless they’re tiny due to weird APL-like syntax), and understandable functions don’t need to be littered with type information to improve understandability.</p>
+<p>That said, I do think that if I were to author an F# library or something like that, I’d annotate make my public functions. It just seems like the right thing.</p>
+<h2>The not so good</h2>
+<p>There were a handful of hiccups on the way.</p>
+<p>Non-Windows setup</p>
+<p>I’m using a Mac (alas, it’s pretty much required for my day job), so I’m a 2nd class citizen in the F# world. It took a while for me to get everything set up and working. The F# toolchain outside of Windows seems solid, but poorly documented. It wasn’t rocket science to get up and running, but it was definitely not as smooth as, say, something like Node. (I’ll publish a step-by-step in another post.)</p>
+<p>Terms can be overwritten</p>
+<p>Terms can be overwritten without any warning at all. Here’s an actual example of how this gave me a bit of a snag.</p>
+<p>I had some code that looks like this:</p>
+<pre><code class="lang-f#"><span class="hl-keyword">open</span> Fake
+
+Target <span class="hl-string">"Clean"</span> (<span class="hl-keyword">fun</span> _ -&gt;
+    …
+)</code></pre>
+<p>All was well in the world. Then, I needed to pull in a little compiler tool, so I added this line:</p>
+<pre><code class="lang-F#"><span class="hl-keyword">open</span> Fake
+<span class="hl-keyword">open</span> Fake.FscHelper
+
+Target <span class="hl-string">"Clean"</span> (<span class="hl-keyword">fun</span> _ -&gt;
+    …
+)</code></pre>
+<p>Crash and burn. It turns out that Fake defines Target but so does Fake.FscHelper. And the two definitions clash. But rather than get a useful warning or error like “Target is defined in Fake and in Fake.FscHelper. You need to disambiguate.” I just got a weird type error indicating that I was calling Target with the wrong kinds of parameters.</p>
+<p>Code that had been working was suddenly not working and the reason wasn’t very obvious. I honestly don’t know why F# allows you to redefine a term like this.</p>
+<p>Fixing it was a pain, too. As far as I can tell, there’s no way to exclude terms from being imported with an open statement. There’s no equivalent to the ES6 import syntax:</p>
+<pre><code class="lang-f#">import {foo} from ‘bar’</code></pre>
+<p>I think this is a pretty glaring limitation. I wound up having to reorder my open statements and then fully qualified or aliased my calls to Fake.FscHelper.Target. Far from ideal.</p>
+<h2>No function overloading</h2>
+<p>This is a big deal. I wanted to do something like this:</p>
+<pre><code class="lang-f#"><span class="hl-keyword">let</span> exec [] = printfn “A term is required”
+<span class="hl-keyword">let</span> exec [hd] = doSomething hd
+<span class="hl-keyword">let</span> exec [hd::rest] = doSomethingElse hd rest</code></pre>
+<p>No can do. In this case, I was able to pretty easily work around the limitation by using pattern matching. That said, in a statically typed functional language, the ability to overload a function seems pretty important and pattern matching can’t always be the solution.</p>
+<p>For instance, I would like to be able to call a toJson function and pass it any type, and have it call the appropriate, type-specific, function if available, and fall back to some generic one if no specific one has been written.</p>
+<p>F# does have member functions (or maybe they’re really methods), which allows you to kind of work around this, but it feels like I’m dropping out of the functional world and back into OO. This makes me sad.</p>
+<h2>No default arguments</h2>
+<p>Evidently, it’s rare for a statically typed functional language to allow default arguments. It makes currying harder to implement. But OCaml can do it, so F# should be able to, too.</p>
+<p>Not a big deal, but I did have to work around it in one context. The workaround was pretty elegant, thanks to pattern matching, so maybe this gripe isn’t a big deal. Still, thought I’d jot it down.</p>
+<h2>Conclusion</h2>
+<p>It’s too early to say, but I did really enjoy the experience of writing and reading F#. The tools on Mac are surprisingly good. The language is highly expressive, terse, and intelligible… A winning combination. If I continue down the F# road, it’ll be interesting to see how active the community is, how robust the ecosystem is, etc. But for now, I have to say tentatively that I’m a fan.</p>
+  </article>
+  <footer class="post-nav">
+    <a href="./capitalism-and-chesterton.html">&larr; Capitalism and Chesterton</a>
+    <a href="./chesterton-on-unemployment.html">Chesterton on Unemployment &rarr;</a>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>A foray into Clojure | Christophilus</title>
+  <link rel="icon" href="../../games/favicon.svg">
+  <link rel="stylesheet" href="../index.css">
+</head>
+<body>
+  <nav class="site-nav">
+    <a href="../../" class="logo"><img src="../../games/favicon.svg" alt="Home"></a>
+    <a href="../" class="current">Blog</a>
+    <a href="../../games/">Games</a>
+  </nav>
+  <article>
+    <header>
+      <time datetime="2016-08-17">Aug 17, 2016</time>
+    </header>
+    <h1>A foray into Clojure</h1>
+<p>I noticed a bug in our product where images sometimes get stored as data urls in text blobs in our database. I wondered how many people were affected by this and how much space was taken up by this extra data. But it's pretty boring to compute that in Ruby or C# or whatever. So I decided to try it with Clojure. It's my first time ever writing Clojure. Here's how it went.</p>
+<h2>Getting set up</h2>
+<p>Getting set up (on my Mac) was stupid easy.</p>
+<p><code>brew install leiningen</code></p>
+<p>Then, I installed a <a href="https://sekao.net/nightcode/">decent editor</a> to help manage all of the parenthesis.</p>
+<h2>Stay strong and repl on</h2>
+<p>Running <code>lein repl</code> kicks up a nifty little command line tool for evaluating Clojure. But in the end, I prefered using the Repl built right into Nightcode (the aforementioned editor). I blew it up a few times. It's a handy feature, but if you're dealing with large volumes of data, you may want to tread lightly.</p>
+<p>Basically, my Clojure development process was:</p>
+<ul><li>Break the problem down into a little functional recipe</li><li>Use the repl to figure out how to code a function</li><li>Code the function</li><li>Use the repl to test the function</li><li>Move on to the next function in the recipe... rinse, repeat</li></ul>
+<h2>Managing project.clj</h2>
+<p>With any project of substance (even this little one), you need to be able to pull in dependencies. Unfortunately, Leiningen doesn't appear to have an equivalen to <code>npm install --save &lt;packagename&gt;</code>. So finding the correct (latest) version for each package is kind of painful.</p>
+<p>I had to Google a good bit. Some were located on one site, others on GitHub, others on random blogs. I feel like I <em>must</em> be missing something, because I can't imagine the Clojure package finding process being so manual.</p>
+<p>Anyway, my project.clj ended up looking like this:</p>
+<pre><code class="lang-clojure">(defproject stats <span class="hl-string">"0.0.1-SNAPSHOT"</span>
+  <span class="hl-keyword">:description</span> <span class="hl-string">"Whatevz"</span>
+  <span class="hl-keyword">:dependencies</span> [[org.clojure/clojure <span class="hl-string">"1.8.0"</span>]
+                 [org.clojure/java.jdbc <span class="hl-string">"0.6.2-alpha3"</span>]
+                 [mysql/mysql-connector-java <span class="hl-string">"6.0.3"</span>]]
+  <span class="hl-keyword">:javac</span>-options [<span class="hl-string">"-target"</span> <span class="hl-string">"1.6"</span> <span class="hl-string">"-source"</span> <span class="hl-string">"1.6"</span> <span class="hl-string">"-Xlint:-options"</span>]
+  <span class="hl-keyword">:aot</span> [stats.core]
+  <span class="hl-keyword">:main</span> stats.core)</code></pre>
+<h2>Nulls, substr, and so forth</h2>
+<p>I haven't done much functional programming, but Haskell and F# have both made me forget that null exists. So, my Clojure exploded a few times with null pointer errors. Also, Clojure's substring function explodes if you get your bounds wrong, so I had to write trunc.</p>
+<pre><code class="lang-clojure"><span class="hl-comment">;; Make sure we have a non-nil string</span>
+(<span class="hl-keyword">defn</span> safe-str [s] (<span class="hl-keyword">if</span> (<span class="hl-keyword">nil</span>? s) <span class="hl-string">""</span> s))
+
+<span class="hl-comment">;; Truncate a string safely</span>
+(<span class="hl-keyword">defn</span> trunc
+  [str n]
+  (<span class="hl-keyword">let</span> [s (safe-str str)]
+    (subs s <span class="hl-number">0</span> (min (count s) n))))</code></pre>
+<h2>Out of memory when processing big database tables</h2>
+<p>Turns out org.clojure/java.jdbc's query isn't lazy by default. I guess it makes sense, as it'd have to hold the database connection open for an undefined amount of time.</p>
+<p>The table I was processing is roughly half a gig, which is actually pretty small. It can easily fit into my Mac's memory. Still, slurping it into an array caused a nice out of memory exception.</p>
+<p>Well, there's a pretty handy way to lazily process records: <code>result-set-fn</code> as somewhat documented <a href="http://clojure-doc.org/articles/ecosystem/java_jdbc/home.html">here</a>.</p>
+<pre><code class="lang-clojure"><span class="hl-comment">;; Load up activities and crunch numbers and such</span>
+<span class="hl-comment">;; This passes a lazy sequence of hashes/maps into the compute-stats</span>
+<span class="hl-comment">;; function. Whatever compute-stats returns is also returned by j/query.</span>
+(<span class="hl-keyword">defn</span> get-activity-stats []
+  (j/query db
+    [<span class="hl-string">"select description from activities"</span>]
+    {<span class="hl-keyword">:result</span>-set-<span class="hl-keyword">fn</span> compute-stats}))</code></pre>
+<p>The <code>compute-stats</code> function is one that I defined elsewhere. It can just treat its argument like any ol list of maps. Nice.</p>
+<h2>No static typing</h2>
+<p>Well, Clojure has some extension you can use to slap static typing onto it. It seems intrusive, from what I've seen. I wish that you could just optionally tell the compiler to do F#-style type-inference and analysis.</p>
+<p>A number of times, I called a function with the wrong number (or order) of args, and Clojure compiled just fine, only to crash and burn when I ran the app. This made me sad.</p>
+<p>When you've tinkered with F# or Elm, you tend to forget that some functional languages have runtime errors. (They happen in F# and Elm, too, but much less often).</p>
+<h2>Parenthesis</h2>
+<p>The parenthesis do make the code hard to read in some cases: "Which one of these 7 parenthesis is the end of the if statement?" But I think it's just because I'm not used to them and because I haven't learned to trust Nightcode.</p>
+<p>Nightcode colors each set of parens, making it easier to match them. It also does some crazy smart auto-closing of your parens. It's awesome, actually. I think that all of my problems with parens are really non-issues when you just type what you want and let Nightcode magic your parenthesis into place.</p>
+<h2>Cons</h2>
+<p>If I had to come up with a list of cons right now, they'd be:</p>
+<ul><li>Nulls</li><li>Leiningen doesn't seem to have an <code>install --save</code> option</li><li>Startup time is kinda slow (I'm going to blame the JVM)</li><li>Static typing is a 2nd class citizen</li><li>No automatic currying</li><li>JVM</li></ul>
+<p>I tacked that last one on there, just because I can. It's obviously a pro, too, depending on how you look at it.</p>
+<h2>Conclusion</h2>
+<p>Would I recommend Clojure? Yeah. I would.</p>
+<p>It's a Lispy language that is well designed and actually has traction (sorry PicoLisp and Chiken Scheme).</p>
+<p>It's enjoyable to work with. I was up and productive with it right away, the repl is handy, and the errors are clear (even the runtime ones).</p>
+<p>How does it stack up against other languages I've tried? Hard to say.</p>
+<p>Based on this brief excursion, I prefer it over Ruby. But then again, I prefer <em>any</em> functional language to Ruby. However, most functional languages that I like are hard to recommend to real businesses. Their tooling and ecosystems simply aren't as good as that of mainstream languages. Clojure stands out as something of an exception in this regard. It's a functional language that I like, and it's got solid tools and a solid ecosystem.</p>
+<p>For big projects, I'd still lean towards a statically typed language. I've been bitten too many times in our Rails/JavaScript codebase by silly problems that never existed when I wrote C#. Clojure's dynamic nature leaves it open to exactly the same set of problems.</p>
+<p>If F# had the vibrant and robust community that Clojure does, it would be my language of choice, hands down. But it doesn't. So it isn't. Moving forward, I'm going to do more of my tinkering with Clojure. It just may become my language of choice.</p>
+  </article>
+  <footer class="post-nav">
+    <a href="./why-you-cant-be-a-good-net-developer.html">&larr; Why you can't be a good .NET developer</a>
+    <a href="./skinny-controllers.html">Skinny Controllers &rarr;</a>
+  </footer>
+</body>
+</html>

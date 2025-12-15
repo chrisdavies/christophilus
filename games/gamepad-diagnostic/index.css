@@ -1,0 +1,237 @@
+@import "../css/base.css";
+
+xc-controllers {
+  --bg: #1e293b;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 80px;
+}
+
+xc-controller-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  text-align: center;
+}
+
+xc-controller {
+  --color: #0d9488;
+  --border: 2px solid var(--color);
+
+  position: relative;
+  display: block;
+  width: 600px;
+  aspect-ratio: 2/1;
+  border-radius: 36px;
+  border: 2px solid var(--color);
+}
+
+xc-dpad {
+  --width: 26px;
+  --height: 36px;
+  --center: calc(50% - var(--width) / 2);
+  position: absolute;
+  left: 50px;
+  top: 60px;
+  height: 100px;
+  width: 100px;
+}
+
+xc-stick-left,
+xc-stick-right,
+xc-button-up,
+xc-button-down,
+xc-button-left,
+xc-button-right,
+xc-dpad-up,
+xc-dpad-right,
+xc-dpad-down,
+xc-dpad-left {
+  border: var(--border);
+}
+
+xc-dpad-up,
+xc-dpad-down {
+  border-radius: 8px;
+  position: absolute;
+  left: var(--center);
+  width: var(--width);
+  height: var(--height);
+}
+
+xc-dpad-up {
+  top: 0;
+}
+
+xc-dpad-down {
+  bottom: 0;
+}
+
+xc-dpad-left,
+xc-dpad-right {
+  border-radius: 8px;
+  position: absolute;
+  top: var(--center);
+  height: var(--width);
+  width: var(--height);
+}
+
+xc-dpad-left {
+  left: 0;
+}
+xc-dpad-right {
+  right: 0;
+}
+
+xc-buttons {
+  position: absolute;
+  width: 120px;
+  height: 120px;
+  top: 60px;
+  right: 50px;
+}
+
+xc-button-left,
+xc-button-right,
+xc-button-up,
+xc-button-down {
+  --size: 36px;
+  --center: calc(50% - var(--size) / 2);
+  color: #2dd4bf;
+  position: absolute;
+  width: var(--size);
+  height: var(--size);
+  border-radius: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+xc-button-up {
+  left: var(--center);
+  top: 0;
+}
+
+xc-button-left {
+  left: 0;
+  top: var(--center);
+}
+
+xc-button-right {
+  right: 0;
+  top: var(--center);
+}
+
+xc-button-down {
+  left: var(--center);
+  bottom: 0;
+}
+
+xc-button-left:before {
+  content: "Y";
+}
+
+xc-button-up:before {
+  content: "X";
+}
+
+xc-button-down:before {
+  content: "B";
+}
+
+xc-button-right:before {
+  content: "A";
+}
+
+xc-stick-left,
+xc-stick-right {
+  --x: 0;
+  --y: 0;
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  border-radius: 100%;
+  bottom: 40px;
+  border-color: #0d948877;
+}
+
+xc-stick-left:before,
+xc-stick-right:before {
+  content: "";
+  position: absolute;
+  border-radius: 100%;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  top: 8px;
+  border: var(--border);
+  transform: translate(calc(10px * var(--x)), calc(10px * var(--y)));
+}
+
+xc-stick-left {
+  left: calc(50% - 140px);
+}
+
+xc-stick-right {
+  right: calc(50% - 140px);
+}
+
+xc-select,
+xc-start {
+  position: absolute;
+  top: 80px;
+  width: 32px;
+  height: 16px;
+  border-radius: 8px;
+  border: var(--border);
+}
+
+xc-select {
+  left: calc(50% - 80px);
+}
+
+xc-start {
+  right: calc(50% - 80px);
+}
+
+xc-trigger-top-left,
+xc-trigger-top-right,
+xc-trigger-bottom-left,
+xc-trigger-bottom-right {
+  --height: 20px;
+  position: absolute;
+  border: var(--border);
+  height: var(--height);
+  width: 120px;
+  top: calc(var(--height) * -1);
+  background: var(--bg);
+  border-top-left-radius: 16px;
+  border-top-right-radius: 16px;
+}
+
+xc-trigger-top-left {
+  left: 40px;
+}
+
+xc-trigger-top-right {
+  right: 40px;
+}
+
+xc-trigger-bottom-left {
+  left: 60px;
+}
+
+xc-trigger-bottom-right {
+  right: 60px;
+}
+
+/**
+ * The button is active / pressed.
+ */
+.xc-active {
+  border-color: #2dd4bf;
+  background: #ccfbf1;
+  box-shadow: 0 0 20px #2dd4bf;
+}

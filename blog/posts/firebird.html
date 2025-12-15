@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Firebird | Christophilus</title>
+  <link rel="icon" href="../../games/favicon.svg">
+  <link rel="stylesheet" href="../index.css">
+</head>
+<body>
+  <nav class="site-nav">
+    <a href="../../" class="logo"><img src="../../games/favicon.svg" alt="Home"></a>
+    <a href="../" class="current">Blog</a>
+    <a href="../../games/">Games</a>
+  </nav>
+  <article>
+    <header>
+      <time datetime="2024-12-05">Dec 5, 2024</time>
+    </header>
+    <h1>Firebird</h1>
+<p>While poking around with a play project, I was thinking, "Wouldn't it be nice if SQLite had a server mode?". It'd be nice to have a database that could give us the best of both worlds-- the simplicity of SQLite and the multi-client scalability of Postgres. You could build small projects with it, and if any of them ever needed to scale, no problemo.</p>
+<p>Well, <a href="https://www.firebirdsql.org">Firebird</a> might be that database. It's an old database from the days of Pascal. It can be embedded, can run in embedded environments, and can run as a standalone server on a high-core, high-RAM beast of a machine.</p>
+<p>Let's take a look.</p>
+<h2>Installation</h2>
+<p>Installation is pretty straightfoward. You download, unzip, and run an install script:</p>
+<pre><code class="lang-bash">curl -O <span class="hl-string">"https://github.com/FirebirdSQL/firebird/releases/download/v5.0.1/Firebird-5.0.1.1469-0-linux-x64.tar.gz"</span>
+
+tar -xvzf <span class="hl-string">"Firebird-5.0.1.1469-0-linux-x64.tar.gz"</span>
+
+./Firebird-5.0.1.1469-0-linux-x64/install.sh</code></pre>
+<p>The instlal script prompts you to create a password for the sysdba user.</p>
+<p>Everything is now installed in <code>/opt/firebird</code>. The server can be configured by editing <code>/opt/firebird/firebird.conf</code>. All binaries are in <code>/opt/firebird/bin</code> which you should add to your path.</p>
+<p>To start Firebird in server mode, all you have to do is run:</p>
+<pre><code class="lang-bash">firebird</code></pre>
+<p>Firebird comes with an example database: <code>/opt/firebird/examples/empbuild/employee.fdb</code>. Let's connect to that using the Firebird interactive tool <code>isql</code>.</p>
+<pre><code class="lang-bash"><span class="hl-comment"># Replace "secret" with whatever password you set up previously</span>
+isql -user sysdba -password secret /opt/firebird/examples/empbuild/employee.fdb</code></pre>
+<p>Here, we can list the tables by running an isql-specific command <code>show tables;</code> or with a bit of standard SQL:</p>
+<pre><code class="lang-sql"><span class="hl-keyword">SELECT</span> RDB$RELATION_NAME
+<span class="hl-keyword">FROM</span> RDB$RELATIONS
+<span class="hl-keyword">WHERE</span> RDB$SYSTEM_FLAG = <span class="hl-number">0</span> <span class="hl-keyword">AND</span> RDB$RELATION_TYPE = <span class="hl-number">0</span>;</code></pre>
+<p>We see the following:</p>
+<pre><code class="lang-text">RDB$RELATION_NAME
+=============================================================== 
+COUNTRY
+JOB
+DEPARTMENT
+EMPLOYEE
+PROJECT
+EMPLOYEE_PROJECT
+PROJ_DEPT_BUDGET
+SALARY_HISTORY
+CUSTOMER
+SALES</code></pre>
+<p>Let's have a look at the first employee record:</p>
+<pre><code class="lang-sql"><span class="hl-keyword">SELECT</span> FIRST <span class="hl-number">1</span> * <span class="hl-keyword">FROM</span> employee;</code></pre>
+<p>If your terminal isn't wide, it might be hard to read the output due to text wrapping. You can run <code>SET LIST ON;</code> to change how the rows are printed.</p>
+<h2>Transactions</h2>
+<p>An interesting thing to note is that everything in Firebird happens in a transaction, and by default, the isolation level is snapshot. This caught me off-guard, as I've never used snapshot isolation in any other database.</p>
+<p>To illustrate this, fire up two separate isql instances.</p>
+<p>In one instance, modify the database:</p>
+<pre><code class="lang-sql"><span class="hl-keyword">UPDATE</span> employee <span class="hl-keyword">SET</span> first_name=<span class="hl-string">'Bobby'</span> <span class="hl-keyword">WHERE</span> emp_no=<span class="hl-number">2</span>;</code></pre>
+<p>Then, in both isql instances, retrieve that record:</p>
+<pre><code class="lang-sql"><span class="hl-keyword">SELECT</span> first_name <span class="hl-keyword">FROM</span> employee <span class="hl-keyword">WHERE</span> emp_no=<span class="hl-number">2</span>;</code></pre>
+<p>One will show <code>Bobby</code> and one with show <code>Robert</code>.</p>
+<p>That's because we haven't committed our transaction. In the isql where you ran the update, go ahead and run <code>COMMIT;</code>, then re-run the select queries.</p>
+<p>There's no change! <code>Bobby</code> and <code>Robert</code> still show up.</p>
+<p><em>That's</em> because the "Robert" isql instance is viewing a snapshot of the database as it was when the database connection was established. To view the latest data, you have to <code>COMMIT;</code> there, too, and now you're looking at the latest version of the database.</p>
+<p>As I said, this surprised me, since it's not the default behavior of any database I've ever used. The transaction levels can be controlled explicitly. See <a href="https://www.firebirdsql.org/file/documentation/chunk/en/refdocs/fblangref40/fblangref40-transacs.html">the docs</a> and <a href="https://ib-aid.com/en/transactions-in-firebird-acid-isolation-levels-deadlocks-and-update-conflicts-resolution/">this blog post</a> for details of how Firebird transactions work.</p>
+  </article>
+  <footer class="post-nav">
+    <a href="./podman-dev.html">&larr; Podman dev environment</a>
+    <a href="./are-price-controls-defensible.html">Are price controls defensible? &rarr;</a>
+  </footer>
+</body>
+</html>

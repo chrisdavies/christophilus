@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bun DIY: Tailwind Lite | Christophilus</title>
+  <link rel="icon" href="../../games/favicon.svg">
+  <link rel="stylesheet" href="../index.css">
+</head>
+<body>
+  <nav class="site-nav">
+    <a href="../../" class="logo"><img src="../../games/favicon.svg" alt="Home"></a>
+    <a href="../" class="current">Blog</a>
+    <a href="../../games/">Games</a>
+  </nav>
+  <article>
+    <header>
+      <time datetime="2024-08-16">Aug 16, 2024</time>
+    </header>
+    <h1>Bun DIY: Tailwind Lite</h1>
+<p>When I started my zero-dependency Bun application experiment, I had no plans to build a CSS processing layer. My plan was to just hand-roll my CSS like any self-respecting neanderthal. <em>But...</em> I'd forgotten how much I like the convenience of fire and wheels and tools and suchlike. Within a few minutes, I was already well on my way to writing a steaming pile of unmaintainable spaghetti. Thus, I decided to write Tailwind from scratch with zero dependencies.</p>
+<p><a href="https://github.com/chrisdavies/atomic-css">Here's what that looks like</a>. Take a look under the hood, and poke around if you dare.</p>
+<h2>Building Tailwind from scratch</h2>
+<p>Tailwind is huge, and I don't use all of it. I figured the 80/20 rule would give me a good shot at building something useful without spending the rest of my life doing it.</p>
+<p>What I built supports:</p>
+<ul><li>The basic rules (e.g. <code>p-2 m-8 bg-red-600</code>)</li><li>Pseudo selectors (e.g. <code>hover:bg-blue-600</code>)</li><li>Responsive breakpoints (e.g. <code>md:w-full</code>)</li><li>Dark / light mode (e.g. <code>dark:bg-gray-800</code>)</li><li>CSS file <code>@tailwind base;</code> and <code>@tailwind utilities</code> slots</li><li>Extracting rules from <code>@layer utilities</code></li><li>Inlining relative <code>@import</code> files</li><li>Efficient, incremental builds in watch-mode</li><li>Customization via configuration</li><li>Reusing rules in CSS files with the <code>@apply</code> directive</li></ul>
+<p>I won't bore you with a comprehensive list of what the library <em>doesn't</em> support, but there are three big missing features that I should note:</p>
+<ul><li>No custom rules (e.g. <code>text-[240rem]</code>)</li><li>No themes or plugins</li><li>Only basic <code>@apply</code> support— no pseudo-selectors</li></ul>
+<p>The lack of custom rules isn't a huge deal to me, as I never use them. If I really need a custom rule, I create one in my CSS file, generally in the utilities layer.</p>
+<p>Themes and plugins are similarly not a thing I care about. Supporting them would probably add a lot of complexity, and I don't need them for my use-case.</p>
+<p>As for the limited implementation of <code>@apply</code>, it turns out that you can get 80% of the value of the components layer by writing something like this:</p>
+<pre><code class="lang-css"><span class="hl-keyword">@layer</span> components {
+  <span class="hl-keyword">.yourselector</span> {
+    <span class="hl-keyword">@apply</span> bg-red-<span class="hl-number">600</span> text-white;
+    &amp;:hover {
+      <span class="hl-keyword">@apply</span> bg-sky-<span class="hl-number">600</span>;
+    }
+    <span class="hl-keyword">@media</span> (min-width: <span class="hl-number">48rem</span>) {
+      <span class="hl-keyword">@apply</span> w-full;
+    }
+  }
+}</code></pre>
+<p>That is the equivalent of this Tailwind component:</p>
+<pre><code class="lang-css"><span class="hl-keyword">@layer</span> components {
+  <span class="hl-keyword">.yourselector</span> {
+    <span class="hl-keyword">@apply</span> bg-red-<span class="hl-number">600</span> text-white hover:bg-sky-<span class="hl-number">600</span> md:w-full;
+  }
+}</code></pre>
+<p>The inability to reuse breakpoints via <code>@apply</code> is probably the biggest drawback to my simplified approach.</p>
+<h2>How it works</h2>
+<p>The atomic-css layer works roughly like this:</p>
+<ul><li>Build the full configuration by merging the user and default configurations</li><li>Generate a (massive) rule lookup table based on the configuration</li><li>Load the CSS (any any CSS referenced by basic @import statements)</li><li>Extract utility rules from the CSS and update the lookup table with them</li><li>Expand the <code>@apply</code> directives based on the lookup table rules</li><li>Scan the source directories, extracting any Tailwind-like class names</li><li>Create a set of all of the referenced rules</li><li>Convert that set to the final CSS</li></ul>
+<p>For example, here's a simplified subset of the rules table that we generate from the config:</p>
+<pre><code class="lang-ts"><span class="hl-keyword">const</span> rules = {
+ <span class="hl-string">'text-sky-500/50'</span>: {
+    css: <span class="hl-string">`color: rgb(14 165 233 / 0.5);`</span>,
+    <span class="hl-comment">// etc...</span>
+  },
+};</code></pre>
+<p>When we scour the source for class names, we come across this: <code>dark:hover:text-sky-500/50</code>.</p>
+<p>We parse this into two parts:</p>
+<pre><code class="lang-ts">{
+  pseudos: [<span class="hl-string">'dark'</span>, <span class="hl-string">'hover'</span>],
+  name: <span class="hl-string">'text-sky-500/50'</span>,
+}</code></pre>
+<p>We then look up the rule by name and find our definition.</p>
+<p>Finally, we build an output rule:</p>
+<pre><code class="lang-ts">{
+  selector: <span class="hl-string">'.dark dark\:hover\:text-sky-500\/50:hover'</span>,
+  css: <span class="hl-string">`color: rgb(14 165 233 / 0.5);`</span>,
+  <span class="hl-comment">// etc...</span>
+}</code></pre>
+<p>Before we write our final CSS, we deduplicate references, combine selectors where possible, etc, and finally write a CSS file that contains only the rules we actually use in our application, in a relatively compact form.</p>
+<p>Everything was pretty simple to implement, but I did cut some corners. The <a href="https://github.com/chrisdavies/atomic-css/blob/main/lib/atomic-css/css-parser.ts">CSS parser</a> is particularly naive. It has many flaws. For example, it treats <code>@layer base;</code> and <code>@layer 'base';</code> as two distinct values. But for my purposes, it's fine. It should gracefully handle all of the CSS I've ever written in my career.</p>
+<h2>The result</h2>
+<p>This was a lot more work than I anticipated— more than the single weekend that I usually allocate for such projects. Much of the work was copy / pasting rules from Tailwind's excellent docs. This was tedious. Maybe I should have automated it. Take a look at the <a href="https://github.com/chrisdavies/atomic-css/blob/main/lib/atomic-css/rule-gen.ts">rule-gen.ts</a> file to see what I mean by tedious.</p>
+<p>In the end, I got a working solution up and running fairly quickly. I'm sure there are plenty of bugs and unintentionally missing features, but the proof of concept is there. And even though it's not a thorough implementation, it's enough to warrant some observations.</p>
+<p>The code is quite fast, and I haven't bothered to optimize it. It performs a full build of my $dayjob codebase in around 175 milliseconds compared to over 2 seconds for Tailwind. Incremental builds are similarly fast. This solves a real pain-point I've had with Tailwind, and makes me wonder if it's worth turning this into a full-fledged, production-ready library.</p>
+<p>I'm not 100% sure exactly why it's so much faster, but I have a pretty good hunch:</p>
+<ul><li>I've only implemented a subset of Tailwind, so I'm doing less</li><li>Tailwind is pluggable— my library is not</li><li>Tailwind ties into postcss and other tools, where my tool is standalone</li><li>Tailwind supports complex rules which prevent the lookup table approach</li></ul>
+<p>I suspect this last point accounts for most of the difference. Converting a class name to a CSS rule is an O(1) operation for my library. Tailwind could use this same technique for many of its rules, but not for all of them (e.g. custom value class names wouldn't work), so I'd guess that Tailwind runs a less optimal, but more extensible algorithm for matching class names to rules.</p>
+<h2>Future optimizations n' such</h2>
+<p>The lookup table is big. Colors are to blame. For every color, we generate many rules: bg, text, border, gradient stops, etc, and <em>all</em> of the opacity variations of those. This consumes a few megs of RAM, and takes around 30ms to generate on my dev laptop. An optimization I may consider in the future is to lazily generate the opacity variants (e.g. <code>text-white/50</code>) rather than eagerly generating them.</p>
+<h2>Footnote: why Tailwind?</h2>
+<p>Before I wrap up, I thought I'd explain why I like Tailwind so much.</p>
+<p>I've worked on web applications for over 20 years, and without fail, in every project I worked on, the CSS was the worst part.</p>
+<p>We all know that we should generally avoid globals in our programs. Any seasoned programmer works to avoid side-effects. Avoiding global, mutable state produces simpler programs, as anyone who has flirted with functional programming can attest. And yet, with CSS, we essentially have a language in which all variables are global and any change you make will probably have unanticipated side-effects.</p>
+<p>On a long-running, large project, the CSS requires superhuman discipline and organizational thought. Find a web application that is older than 5 years, and you'll find all sorts of dead CSS that is still sitting there because folks are too afraid to touch it. This is so common that you could accurately describe legacy CSS as an append-only language.</p>
+<blockquote><p>There are only two hard things in Computer Science: cache invalidation and naming things.</p>
+<p>   — Phil Karlton</p></blockquote>
+<p>CSS requires you to invent names. A lot of names. You have to name every. Single. Thing. Naming is hard, ergo CSS is hard.</p>
+<p>Maintainable code requires two things: the ability to fearlessly delete and refactor, and the ability to reason locally. If you hop into a simple component you should be able to read it quickly from top to bottom, understand what it does, and make the changes you want. The more files you have to jump between, the harder this task becomes. Understandability is impeded by separating concerns across CSS / JS / HTML boundaries rather than across component boundaries. The traditional approach to hand-rolling CSS ensures that you're always jumping between at least two files in order to reason about a component.</p>
+<p>Tailwind solves all of these problems, and it solves it elegantly. With Tailwind, you get:</p>
+<ul><li>Fearless refactoring</li><li>Minimal side-effects</li><li>Only the rules actively used by your application end up in your CSS</li><li>Far less time spent naming things</li><li>Locality of reasoning</li></ul>
+<p>Tailwind is functional programming for CSS. I love it.</p>
+  </article>
+  <footer class="post-nav">
+    <a href="./switching-to-linux.html">&larr; Switching to Linux</a>
+    <a href="./zero-dependency-applications-in-bun.html">Why write zero-dependency software? &rarr;</a>
+  </footer>
+</body>
+</html>

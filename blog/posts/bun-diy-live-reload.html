@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bun: DIY Live Reload | Christophilus</title>
+  <link rel="icon" href="../../games/favicon.svg">
+  <link rel="stylesheet" href="../index.css">
+</head>
+<body>
+  <nav class="site-nav">
+    <a href="../../" class="logo"><img src="../../games/favicon.svg" alt="Home"></a>
+    <a href="../" class="current">Blog</a>
+    <a href="../../games/">Games</a>
+  </nav>
+  <article>
+    <header>
+      <time datetime="2024-07-04">Jul 4, 2024</time>
+    </header>
+    <h1>Bun: DIY Live Reload</h1>
+<p>Live reload lets you see changes instantly in your browser whenever you save any files. It's a must-have if you want to iterate quickly on any browser content. Live reload isn't baked into Bun, but it's fairly easy to wire up.</p>
+<p>Here's an example of what we'll be building:</p>
+<pre><code class="lang-ts"><span class="hl-comment">// Watch the css and dist directories, and refresh all browsers when</span>
+<span class="hl-comment">// any changes are detected. Browsers will also refresh when the server</span>
+<span class="hl-comment">// restarts.</span>
+<span class="hl-keyword">const</span> liveReload = makeLiveReloadMiddleware({ watchdirs: [<span class="hl-string">'css'</span>, <span class="hl-string">'dist'</span>] });
+
+<span class="hl-comment">// Wrap our request handler in the middleware.</span>
+<span class="hl-keyword">const</span> requestHandler = liveReload(<span class="hl-keyword">async</span> (req) =&gt; {
+  <span class="hl-keyword">return</span> <span class="hl-keyword">new</span> Response(someHTML, {
+    headers: {
+      <span class="hl-string">'Content-Type'</span>: <span class="hl-string">'text/html'</span>,
+    },
+  });
+});
+
+<span class="hl-comment">// Create the server</span>
+Bun.serve({ port, fetch: requestHandler });</code></pre>
+<h2>How it works</h2>
+<ul><li>Middleware injects a script into all HTML payloads</li><li>The script long-polls the server</li><li>When the long-poll ends, the script reconnects, then hard-refreshes</li></ul>
+<p>The hackiest part is the way we inject the script into our responses. We detect any HTML responses, read their payload, and replace <code>&lt;/head&gt;</code> with <code>&lt;script&gt;...&lt;/script&gt;&lt;/head&gt;</code>. Definitely hacky, and if you have any <em>massive</em>, streaming HTML endpoints (e.g. that dumps a huge table out, or whatever), you may want to either optimize this implementation, or add the ability to ignore certain problematic endpoints.</p>
+<h2>Source</h2>
+<pre><code class="lang-ts"><span class="hl-comment">/**
+ * This middleware provides live-reload functionality in dev-environments.
+ * It intercepts any client requests made to a unique URL (endpointPath),
+ * holding those connections open until a file change is detected.
+ *
+ * When we detect a file change, we'll respond to all connected clients,
+ * sending them into refresh mode. They also go into refresh mode when
+ * bun restarts (e.g. if running bun --watch, and making a change to a server
+ * file).
+ *
+ * The hackiest part of this is the way we inject our live-reload script
+ * into the head of all HTML responses.
+ */</span>
+
+<span class="hl-keyword">import</span> type { Server } <span class="hl-keyword">from</span> 'bun<span class="hl-string">';
+import path from '</span>node:path<span class="hl-string">';
+import { watch } from '</span>fs<span class="hl-string">';
+
+// The Bun Serve.fetch handler singnature
+type HTTPHandler = (request: Request, server: Server) =&gt; Response | Promise&lt;Response&gt;;
+
+// The type signature of a middleware function
+type Middleware = (next: HTTPHandler) =&gt; HTTPHandler;
+
+/**
+ * If running in dev-mode, watch the watchdirs folders for changes, and notify clients.
+ */
+export function makeLiveReloadMiddleware(opts: { watchdirs: string[] }): Middleware {
+  // In non-dev environments, this middleware is a noop
+  if (process.env.NODE_ENV !== '</span>development<span class="hl-string">') {
+    return (next) =&gt; next;
+  }
+
+  // An async function which will notify long-poll request handlers of file changes
+  const waitForFileChange = makeFileWaiter(opts.watchdirs);
+
+  // The endpoint for long-poll requests
+  const endpointPath = '</span>/livereload-0e4e2dfb-646b-<span class="hl-number">4608</span>-<span class="hl-number">9943</span>-ad3cad795856<span class="hl-string">';
+
+  // The script we'</span>ll inject to perform the long-poll <span class="hl-keyword">from</span> the browser
+  <span class="hl-keyword">const</span> liveReloadScript = <span class="hl-string">`&lt;script&gt;(${clientScript.toString()}("${endpointPath}"));&lt;/script&gt;`</span>;
+
+  console.log(<span class="hl-string">`[livereload] watching ${opts.watchdirs} for changes`</span>);
+
+  <span class="hl-keyword">return</span> <span class="hl-keyword">function</span> liveReloadMiddleware(next) {
+    <span class="hl-keyword">return</span> <span class="hl-keyword">async</span> (req, server) =&gt; {
+      <span class="hl-comment">// If our long-poll endpoint is being requested, we'll wait for a file</span>
+      <span class="hl-comment">// change, then we'll notify the client.</span>
+      <span class="hl-keyword">if</span> (req.url.endsWith(endpointPath)) {
+        <span class="hl-keyword">return</span> <span class="hl-keyword">new</span> Response(<span class="hl-keyword">await</span> waitForFileChange(), {
+          headers: { <span class="hl-string">'Content-Type'</span>: <span class="hl-string">'text/plain'</span> },
+        });
+      }
+</code></pre>
+<p>  // If it's not an HTML response, we'll just pass it along<br>  const result = await next(req, server);<br>  if (!result.headers.get('Content-Type')?.startsWith('text/html')) {<br>    return result;<br>  }</p>
+<p>  // We have an HTML response, so we'll inject our live reload script<br>  const body = await result.text();<br>  return new Response(body.replace('&lt;/head&gt;', <code>${liveReloadScript}&lt;/head&gt;</code>), {<br>    headers: result.headers,<br>  });<br>};</p>
+<pre><code class="lang-text">  };
+}
+
+/**
+ * This is the client-side function. We'll stringify this and inject
+ * it into any HTML payload that has a `&lt;/head&gt;` tag.
+ */
+async function clientScript(endpointPath: string) {
+  // Detect when the user is navigating away, in which case we don't
+  // want to interfere by refreshing.
+  let navigating = false;
+  window.addEventListener('beforeunload', () =&gt; {
+    navigating = true;
+  });
+
+  // Show a little "Reconnecting..." message when we've lost
+  // the server connection.
+  function showStatus() {
+    const el = document.createElement('div');
+    el.innerHTML = `
+      &lt;div style="position: fixed; top: 0; left: 0; z-index: 10000; background: #800; padding: 2px 4px; text: white"&gt;
+        Reconnecting...
+      &lt;/div&gt;
+    `;
+    document.body.append(el);
+  }
+
+  // Re-attempt the connection in a loop after which, refresh
+  async function reconnect() {
+    if (navigating) {
+      return;
+    }
+    showStatus();
+    let backoff = 10;
+    for (let i = 0; i &lt; 1000; ++i) {
+      try {
+        await fetch('/');
+        break;
+      } catch {
+        await new Promise((r) =&gt; setTimeout(r, backoff));
+        backoff = Math.min(backoff * 1.05, 500);
+      }
+    }
+    !navigating &amp;&amp; location.reload();
+  }
+
+  // Hit the middlware endpoint and wait for either a response or
+  // a disconnect, sending us into the reconnect / refresh phase.
+  fetch(endpointPath)
+    .then((x) =&gt; x.text())
+    .then(reconnect, reconnect);
+}
+
+// Make a function which can be used to wait for file changes in any
+// of the specified directories.
+function makeFileWaiter(watchdirs: string[]) {
+  let reloadResolve: (s: string) =&gt; void;
+  let reloadPromise: Promise&lt;string&gt;;
+
+  const resetPromise = () =&gt; {
+    reloadPromise = new Promise((resolve) =&gt; {
+      reloadResolve = resolve;
+    });
+  };
+  resetPromise();
+
+  watchdirs.forEach((dir) =&gt; {
+    watch(path.join(process.cwd(), dir), { recursive: true }, (_event, filename) =&gt; {
+      const resolve = reloadResolve;
+      resetPromise();
+      resolve(filename || 'filechange');
+    });
+  });
+
+  return () =&gt; reloadPromise;
+}</code></pre>
+  </article>
+  <footer class="post-nav">
+    <a href="./bun-diy-server-side-jsx.html">&larr; Bun: Zero-Dependency Server-Side JSX</a>
+    <a href="./bun-on-a-cheap-vps.html">Running A Bun Service On A Cheap VPS &rarr;</a>
+  </footer>
+</body>
+</html>

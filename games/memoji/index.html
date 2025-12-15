@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" href="../favicon.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="./index.css" />
+  <title>Memoji | Christophilus</title>
+</head>
+<body>
+  <a class="logo" href="/"><img src="../favicon.svg" alt="Home"></a>
+  <main>
+    <header class="game-header">
+      <div class="players"></div>
+      <button class="add-player"><b>+</b><span>Add Player</span></button>
+    </header>
+    <game-board></game-board>
+  </main>
+
+  <script>
+    /*
+      - Matching pairs are displayed in miniature at the top
+      - Add multiple-player support
+    */
+    const chars = '🤪 🤖 😺 ❤️ 🐵 👻 🐶 🦕 🐸 🍀 🐙 🐼 🍄 🌹 🌵 🦈 🐢 🍉 🏔️ 🚀 ⭐ 🚢 🎃 🏈 🌲 🦥 🐳 🦊 🐑 🦉 🦝 🐦 🦁 🪐 ⛵ 🕰️ 🎪 🏕️ 🌛'.split(' ');
+    const size = 6;
+    const numPairs = 18;
+    const board = document.querySelector('game-board');
+    const playersContainer = document.querySelector('.players');
+    const btnAddPlayer = document.querySelector('.add-player');
+    let players = JSON.parse(localStorage.memoryPlayers || `null`) || [{ name: 'Player 1', score: 0 }, { name: 'Player 2', score: 0 }];
+    let level = [];
+    let movesRemaining = 0;
+
+    board.style.setProperty('--size', size);
+
+    function savePlayers() {
+      localStorage.memoryPlayers = JSON.stringify(players);
+    }
+
+    function currentPlayer() {
+      return players.find((p) => p.el.classList.contains('current'));
+    }
+
+    function nextPlayer() {
+      const index = players.indexOf(currentPlayer());
+      const next = (index + 1) % players.length;
+      players[index].el.classList.remove('current');
+      players[next].el.classList.add('current');
+    }
+
+    function addNewPlayer() {
+      addPlayer({ name: `Player ${players.length + 1}`, score: 0 });
+      savePlayers();
+      players[players.length - 1].el.querySelector('input').select();
+      players[0]?.el.classList.add('current');
+    }
+
+    function addPlayer(player) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = `<div class="player"><span class="name-wrapper"><span class="autosize"><input class="name" value="" /><pre></pre></span></span></span><span class="score"></span></div>`;
+      const el = tmp.firstElementChild;
+      player.el = el;
+      player.score = 0;
+      const name = el.querySelector('.name');
+      const pre = el.querySelector('pre');
+      const scoreEl = el.querySelector('.score');
+      name.value = player.name;
+      pre.textContent = player.name;
+      name.addEventListener('focus', () => name.select());
+      name.addEventListener('input', (e) => {
+        player.name = e.target.value;
+        pre.textContent = e.target.value;
+        savePlayers();
+      });
+      name.addEventListener('keydown', (e) => {
+        const isDelete = !name.value && (e.key === 'Backspace' || e.key === 'Delete');
+        if (isDelete) {
+          const index = players.indexOf(player);
+          players.splice(index, 1);
+          el.remove();
+          players[0]?.el.classList.add('current');
+          setTimeout(() => {
+            players[Math.max(0, index - 1)]?.el.querySelector('input').select();
+          }, 10);
+          savePlayers();
+          document.querySelector('.game-header').append(btnAddPlayer);
+        }
+        if (e.key === 'Enter') {
+          addNewPlayer();
+        }
+      });
+      el.querySelector('.score').textContent = player.score;
+      playersContainer.append(el);
+      if (!players.includes(player)) {
+        players.push(player);
+      }
+      player.inc = () => {
+        ++player.score;
+        scoreEl.textContent = player.score;
+      };
+      if (players.length >= 4) {
+        btnAddPlayer.remove();
+      }
+    }
+
+    function initPLayers() {
+      playersContainer.innerHTML = '';
+      players.forEach(addPlayer);
+      players[0]?.el.classList.add('current');
+      btnAddPlayer.addEventListener('click', () => {
+        addNewPlayer();
+      });
+    }
+
+    function flip(tile) {
+      tile.classList.toggle('flipped');
+    }
+
+    function shuffle(arr) {
+      for (let i = 0; i < arr.length; ++i) {
+        const x = Math.floor(Math.random() * arr.length);
+        const tmp = arr[x];
+        arr[x] = arr[i];
+        arr[i] = tmp;
+      }
+      return arr;
+    }
+
+    function generateBoard() {
+      initPLayers();
+
+      const subset = shuffle([...chars]).slice(0, numPairs);
+      const tiles = shuffle([...subset, ...subset]);
+
+      board.innerHTML = '';
+
+      for (const ch of tiles) {
+        const tile = document.createElement('game-tile');
+        tile.dataset.ch = ch;
+        const span = document.createElement('span');
+        span.textContent = ch;
+        tile.append(span);
+        board.append(tile);
+        tile.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+
+          if (tile.matches('.flipped,.match')) {
+            return;
+          }
+
+          const flipped = board.querySelectorAll('.flipped');
+          if (flipped.length > 1) {
+            flipped.forEach((el) => el.classList.remove('flipped'));
+          }
+
+          flip(tile);
+
+          // If we have found a pair, then we'll add class "match" and remove
+          // class "flipped" so we get a nice little "match" animation.
+          const matches = board.querySelectorAll(`.flipped[data-ch="${ch}"]`);
+          if (matches.length > 1) {
+            matches.forEach((el) => {
+              el.classList.add('match');
+              el.classList.remove('flipped');
+            });
+            currentPlayer().inc();
+          } else if (board.querySelectorAll('.flipped').length === 2) {
+            nextPlayer();
+          }
+
+          // Check if the game has been won.
+          if (!board.querySelector('game-tile:not(.match)')) {
+            document.body.insertAdjacentHTML('beforeend', `<game-modal class="winning-modal">
+              <game-modalbody>
+              <h2>🥳</h2>
+              <p><b></b> won!</p>
+              <button class="play-again"><b>⟲</b><span>Play Again</span></button>
+              <footer>
+                <score-board></score-board>
+              </footer>
+              </game-modalbody>
+            </game-modal>`);
+            const { score: highScore } = players.reduce((a, b) => {
+              return a.score > b.score ? a : b;
+            });
+            const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
+            const winners = players.filter((x) => x.score === sortedPlayers[0].score);
+            document.querySelector('game-modal b').textContent = winners.map((x) => x.name).join(' & ');
+            const modal = document.querySelector('.winning-modal');
+            sortedPlayers.forEach((x) => {
+              const el = document.createElement('final-score');
+              el.innerHTML = `<span></span><b>${x.score}</b>`;
+              el.querySelector('span').textContent = x.name;
+              modal.querySelector('score-board').append((el));
+            });
+            modal.querySelector('.play-again').addEventListener('click', () => {
+              generateBoard();
+              modal.remove();
+            });
+          }
+        });
+      }
+    }
+
+    generateBoard();
+
+  </script>
+</body>
+</html>

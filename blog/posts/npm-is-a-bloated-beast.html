@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NPM is a Bloated Beast | Christophilus</title>
+  <link rel="icon" href="../../games/favicon.svg">
+  <link rel="stylesheet" href="../index.css">
+</head>
+<body>
+  <nav class="site-nav">
+    <a href="../../" class="logo"><img src="../../games/favicon.svg" alt="Home"></a>
+    <a href="../" class="current">Blog</a>
+    <a href="../../games/">Games</a>
+  </nav>
+  <article>
+    <header>
+      <time datetime="2016-06-06">Jun 6, 2016</time>
+    </header>
+    <h1>NPM is a Bloated Beast</h1>
+<p>At work, we noticed our build process was using over a gig of ram and traced it back to npm. Our npm build is fairly straightforward, and our project size is on the small side. 700 MB for just npm install, and another 500 MB or so for WebPack. WebPack’s memory usage, I can understand. But 700 MB just to download some packages? Seems excessive.</p>
+<p>The solution we’ve come up with for now is to launch <code>npm install</code> from our build script, and then run webpack as a separate build task instead of launching webpack as an npm postinstall step. Lame, but effective. Takes our peak memory consumption from ~1200 MB to ~700 MB.</p>
+<p>The fact that NPM takes such resources underscores the sad truth of modern programming. We see memory and resources as free. We indiscriminantly pull libraries in, only to use a few functions... And the bloat is predictably vast.</p>
+  </article>
+  <footer class="post-nav">
+    <a href="./quarterly-good-reads.html">&larr; Quarterly Good Reads</a>
+    <a href="./real-world-functional-programming.html">Real World Functional Programming &rarr;</a>
+  </footer>
+</body>
+</html>

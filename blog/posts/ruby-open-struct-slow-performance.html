@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ruby's Open Struct's Slow Performance | Christophilus</title>
+  <link rel="icon" href="../../games/favicon.svg">
+  <link rel="stylesheet" href="../index.css">
+</head>
+<body>
+  <nav class="site-nav">
+    <a href="../../" class="logo"><img src="../../games/favicon.svg" alt="Home"></a>
+    <a href="../" class="current">Blog</a>
+    <a href="../../games/">Games</a>
+  </nav>
+  <article>
+    <header>
+      <time datetime="2016-06-23">Jun 23, 2016</time>
+    </header>
+    <h1>Ruby's Open Struct's Slow Performance</h1>
+<p>Ruby’s OpenStruct is slow, but convenient. I wanted something similar. My requirements:</p>
+<ul><li>Define a read-only property bag of any shape to describe events</li><li>Avoid having to deal with concrete classes per event type</li><li>Be able to access the properties as if they belonged to a concrete class</li></ul>
+<p>Fast</p>
+<p>The conclusion is that OpenStruct is really slow, but it’s possible to to create a similar object with really good perf. Here's a gist of my tests/results:</p>
+<p>{% gist fb1ea90afdb226e28b6d7b984acbc727 %}</p>
+  </article>
+  <footer class="post-nav">
+    <a href="./from-software-engineer-to-web-developer.html">&larr; From Software Engineer to Web Developer</a>
+    <a href="./prototypal-vs-literal-js-objects.html">Prototypal vs Literal JS Objects &rarr;</a>
+  </footer>
+</body>
+</html>

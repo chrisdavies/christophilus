@@ -1,4 +1,4 @@
-// index.ts
+// games/tileflip/index.ts
 init();
 function randint(max) {
   return Math.floor(Math.random() * max);
