@@ -42,7 +42,7 @@ main {
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  padding: 1rem;
+  padding: 2rem 1rem;
 }
 
 .game-options {
@@ -99,7 +99,7 @@ game-board {
   grid-template-columns: repeat(var(--size), minmax(0, 1fr));
   gap: 1rem;
   width: calc(100% - 2rem);
-  max-width: 48rem;
+  max-width: 36rem;
   user-select: none;
 }
 
@@ -284,32 +284,19 @@ final-score {
   text-align: center;
   border-radius: 0.5rem;
   padding: 0.5rem 1rem;
+  border: 2px solid #475569;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .player.current {
-  background: rgba(0 0 0 / 0.25);
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.4);
 }
 
 .name-wrapper {
   display: flex;
   flex-grow: 1;
   align-items: center;
-  gap: 0.5rem;
-}
-
-.name-wrapper:before {
-  content: '';
-  display: inline-flex;
-  width: 1rem;
-  height: 1rem;
-  border-radius: 0.5rem;
-  background: rgba(0 150 200 / 0.75);
-  box-shadow: 0.25rem 0.25rem 1rem rgba(0 0 0 / 0.75);
-  opacity: 0;
-}
-
-.current .name-wrapper:before {
-  opacity: 1;
 }
 
 .autosize {
@@ -350,4 +337,22 @@ final-score {
 .player .name:focus {
   background: rgba(0 0 0 / 0.25);
   outline: none;
+}
+
+@media (max-width: 600px) {
+  body {
+    touch-action: pan-x pan-y;
+  }
+
+  .add-player {
+    display: none;
+  }
+
+  game-board {
+    gap: 0.5rem;
+  }
+
+  game-tile {
+    font-size: 2.5rem;
+  }
 }

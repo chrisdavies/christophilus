@@ -12,7 +12,7 @@
   z-index: 10;
   display: flex;
   align-items: center;
-  gap: 32px;
+  gap: 24px;
   padding: 24px 32px;
   font-size: 16px;
   line-height: 1;
@@ -52,6 +52,7 @@
   gap: 1rem;
   font-size: 3rem;
   font-weight: 200;
+  padding-left: 32px;
 }
 
 .links a {
@@ -101,4 +102,36 @@
   color: #0f172a;
   text-align: right;
   overflow: hidden;
+}
+
+.mobile-only {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  .site-nav {
+    padding: 24px 1rem;
+  }
+
+  main {
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding-top: 2rem;
+  }
+
+  .links {
+    padding-left: 1rem;
+  }
+
+  .nav-blog {
+    display: none;
+  }
+
+  .mobile-only {
+    display: block;
+  }
+
+  .desktop-only {
+    display: none;
+  }
 }

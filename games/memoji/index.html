@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <link rel="icon" href="../favicon.svg" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <link rel="stylesheet" href="./index.css" />
   <title>Memoji | Christophilus</title>
 </head>
@@ -22,8 +22,9 @@
       - Add multiple-player support
     */
     const chars = '🤪 🤖 😺 ❤️ 🐵 👻 🐶 🦕 🐸 🍀 🐙 🐼 🍄 🌹 🌵 🦈 🐢 🍉 🏔️ 🚀 ⭐ 🚢 🎃 🏈 🌲 🦥 🐳 🦊 🐑 🦉 🦝 🐦 🦁 🪐 ⛵ 🕰️ 🎪 🏕️ 🌛'.split(' ');
-    const size = 6;
-    const numPairs = 18;
+    const isMobile = window.matchMedia('(max-width: 600px)').matches;
+    const size = isMobile ? 4 : 6;
+    const numPairs = isMobile ? 8 : 18;
     const board = document.querySelector('game-board');
     const playersContainer = document.querySelector('.players');
     const btnAddPlayer = document.querySelector('.add-player');
