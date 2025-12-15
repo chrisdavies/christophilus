@@ -26,10 +26,15 @@ function postTemplate(
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${title} | Christophilus</title>
+  <link rel="icon" href="../../games/favicon.svg">
   <link rel="stylesheet" href="../index.css">
 </head>
 <body>
-  <nav><a href="../../">Home</a> / <a href="../">Blog</a> / ${title}</nav>
+  <nav class="site-nav">
+    <a href="../../" class="logo"><img src="../../games/favicon.svg" alt="Home"></a>
+    <a href="../" class="current">Blog</a>
+    <a href="../../games/">Games</a>
+  </nav>
   <article>
     <header>
       <time datetime="${date}">${formatDate(date)}</time>
@@ -56,10 +61,15 @@ function indexTemplate(posts: { title: string; date: string; slug: string }[]): 
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Blog | Christophilus</title>
+  <link rel="icon" href="../games/favicon.svg">
   <link rel="stylesheet" href="./index.css">
 </head>
 <body>
-  <nav><a href="../">Home</a></nav>
+  <nav class="site-nav">
+    <a href="../" class="logo"><img src="../games/favicon.svg" alt="Home"></a>
+    <a href="./" class="current">Blog</a>
+    <a href="../games/">Games</a>
+  </nav>
   <main>
     <h1>Blog</h1>
     <ul class="post-list">
