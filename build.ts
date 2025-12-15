@@ -31,8 +31,8 @@ function postTemplate(
 </head>
 <body>
   <nav class="site-nav">
-    <a href="../../" class="logo"><img src="../../games/favicon.svg" alt="Games"></a>
-    <a href="../" class="current">Blog</a>
+    <a href="../../" class="logo"><img src="../../games/favicon.svg" alt="Home"></a>
+    <a href="../">&larr; Blog</a>
   </nav>
   <article>
     <header>
@@ -65,8 +65,7 @@ function indexTemplate(posts: { title: string; date: string; slug: string }[]): 
 </head>
 <body>
   <nav class="site-nav">
-    <a href="../" class="logo"><img src="../games/favicon.svg" alt="Games"></a>
-    <a href="./" class="current">Blog</a>
+    <a href="../" class="logo"><img src="../games/favicon.svg" alt="Home"></a>
   </nav>
   <main>
     <h1>Blog</h1>

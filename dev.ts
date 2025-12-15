@@ -39,6 +39,12 @@ watch("./index.html", async () => {
   console.log("Rebuilt!");
 });
 
+watch("./index.css", async () => {
+  console.log("Change: index.css");
+  await $`bun build.ts`.quiet();
+  console.log("Rebuilt!");
+});
+
 // Simple static file server
 const mimeTypes: Record<string, string> = {
   ".html": "text/html",
@@ -60,7 +66,10 @@ Bun.serve({
     if (await file.exists()) {
       const ext = path.substring(path.lastIndexOf("."));
       return new Response(file, {
-        headers: { "Content-Type": mimeTypes[ext] || "application/octet-stream" },
+        headers: {
+          "Content-Type": mimeTypes[ext] || "application/octet-stream",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+        },
       });
     }
 

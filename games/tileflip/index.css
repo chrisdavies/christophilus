@@ -13,6 +13,7 @@ body {
   flex-direction: column;
   gap: 1rem;
   container-type: size;
+  touch-action: pan-x pan-y;
 }
 
 .logo {
@@ -336,7 +337,7 @@ game-dialog-wrapper {
     & button {
       display: none;
     }
-    & button[data-shortcut=u],
+    & button[data-shortcut=x],
     & button[data-shortcut=n] {
       display: inline-flex;
     }
