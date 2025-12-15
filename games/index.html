@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="./favicon.svg" />
+    <link rel="stylesheet" href="./index.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Games - Christophilus</title>
+  </head>
+  <body>
+    <main>
+      <section class="links">
+        <a href="./tileflip/">Tileflip</a>
+        <a href="./sokoban/">Sokoban</a>
+        <a href="./memoji/">Memoji</a>
+        <a href="./blockfit/">Blockfit</a>
+        <a href="./gamepad-diagnostic/">Gamepad Diagnostic</a>
+      </section>
+
+      <script>
+        (function () {
+          const app = document.querySelector('main');
+          if (!app) {
+            return;
+          }
+
+          app.insertAdjacentHTML('afterbegin', `<div class="title-tiles-wrapper">
+            <div class="title-tiles">${
+              'christophilus'
+                .padStart(25, ' ')
+                .padEnd(35, ' ')
+                .split('')
+                .map((ch) => `<div class="title-tile">${ch}</div>`)
+                .join('')
+            }</div>
+          </div>`);
+        }());
+      </script>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,115 @@
+# Bun DIY: Serving Static Assets
+
+Today, we'll be building a small, zero-dependency HTTP handler for serving static assets using Bun. Serving static assets from Bun is pretty simple, but there are some things to consider:
+
+- Properly handling missing files
+- Protecting against path-exploits (e.g. requests like `/assets/../.env` should fail)
+- Using ETags to avoid unnecessary bandwidth consumption
+
+## Usage
+
+Call `makeStaticAssetHandler`, and pass it the name of the folder whose contents you wish to serve. This returns an HTTP handler `(req: Request) => Promise<Response>` which can be used by `Bun.serve` or by a router, as in the following example:
+
+```js
+route.add('get/assets/*path', makeStaticAssetHandler('assets'));
+```
+
+## Handling missing files
+
+When we get a request for a non-existent path, we want to return a 404. Checking if a file exists is [trivial in bun](https://bun.sh/guides/read-file/exists):
+
+```ts
+const file = Bun.file(fullPath);
+if (!(await file.exists())) {
+  return new Response('File not found', { status: 404 });
+}
+```
+
+## Avoiding path exploits
+
+Malicious users might try to request files that are outside of our static asset folders. For example, they might try to read our `.env` file by requesting: `/assets/../.env`. To mitigate against such requests, we'll use [path.normalize](https://nodejs.org/api/path.html#pathnormalizepath). This function resolves all `.` and `..` segments. Once that's done, we can check if the resulting path starts with the static asset folder prefix. If not, we'll return an HTTP 403 (Forbidden).
+
+## ETags
+
+[ETags](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/ETag) allow clients to check if an asset has changed since it was last requested and only download it if so. It allows us to have the benefits of caching without resorting to old cache-busting hacks.
+
+We'll use [Bun's built-in sha256 hash](https://bun.sh/docs/api/hashing) support to compute ETags for any assets we serve. We'll toss the result into an in-memory cache to avoid re-computing the hash. Since our project will have a relatively small number of static assets, we won't bother with cache-eviction or anything like that. If you are building an application that will have a large or unknown number of static assets, then you should look into a different caching strategy. For example, you might pre-compute the etags and store them on disk alongside the assets (e.g. `foo.png` might have a `foo.png.etag` file), or you might use a LRU cache.
+
+## Source
+
+Here's the source:
+
+```ts
+/**
+ * This file contains logic for serving static assets out
+ * of a folder. It is meant to be used in conjunction with
+ * a router, rather than as traditional middleware.
+ */
+import path from 'node:path';
+
+/**
+ * Given a file, compoute its sha256 hash.
+ */
+async function computeFileSha256(filename: string) {
+  const hasher = new Bun.CryptoHasher('sha256');
+  const file = Bun.file(filename);
+  const stream: any = file.stream();
+  for await (const chunk of stream) {
+    hasher.update(chunk);
+  }
+  return hasher.digest('base64');
+}
+
+/**
+ * A memoized function which computes the sha256 hash of a file.
+ * In dev-mode, we'll recompute the hash on each request. In
+ * production, we'll cache it.
+ */
+const getEtag = (() => {
+  if (process.env.NODE_ENV === 'development') {
+    return computeFileSha256;
+  }
+  const cache: Record<string, string> = {};
+  return async (filename: string) => {
+    let hash = cache[filename];
+    if (!hash) {
+      hash = await computeFileSha256(filename);
+      cache[filename] = hash;
+    }
+    return hash;
+  };
+})();
+
+/**
+ * Create a route-handler for serving static assets from a specific
+ * folder. The route should define a "path" parameter, or the endpoint
+ * will not work.
+ *
+ * Usage:
+ *
+ *   route.add('get/assets/*path', makeStaticAssetHandler('dist/img'));
+ *   route.add('get/css/*path', makeStaticAssetHandler('dist/css'));
+ */
+export function makeStaticAssetHandler(folderPath: string) {
+  return async (req: Request & { params: Record<string, string> }) => {
+    // Compute the full path, normalizing out any .. and . segments
+    const fullPath = path.normalize(path.join(folderPath, req.params.path));
+    // We've got an invalid request, possibly someone malicious hunting for files
+    if (!fullPath.startsWith(folderPath)) {
+      return new Response('Invalid asset path', { status: 403 });
+    }
+    // Handle the 404 edge-case
+    const file = Bun.file(fullPath);
+    if (!(await file.exists())) {
+      return new Response('File not found', { status: 404 });
+    }
+    // Compute the etag and send a 304 if the client already has the latest
+    const etag = await getEtag(fullPath);
+    if (etag === req.headers.get('If-None-Match')) {
+      return new Response(null, { status: 304 });
+    }
+    return new Response(file, { headers: { ETag: etag } });
+  };
+}
+```
+

@@ -1,0 +1,264 @@
+* {
+  box-sizing: border-box;
+}
+
+/**
+ * Make the player's eyes blink.
+ */
+@keyframes blink {
+  0%, 100% {
+    transform: rotateX(0);
+  }
+  50% {
+    transform: rotateX(90deg);
+  }
+}
+
+:root {
+  --tile-size: 3rem;
+  --x: 0;
+  --y: 0;
+  background: #0f172a;
+  color: #d1d5db;
+  font-family: system-ui;
+}
+
+body, html {
+  padding: 0;
+  margin: 0;
+}
+
+body {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  user-select: none;
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+}
+
+game-header {
+  display: flex;
+  padding: 1.5rem;
+  justify-content: center;
+  margin-bottom: 0.5rem;
+  gap: 2rem;
+}
+
+a,
+select,
+button {
+  font: inherit;
+  text-decoration: none;
+  color: inherit;
+  border: none;
+  background: transparent;
+  display: inline-flex;
+  gap: 0.5rem;
+  cursor: pointer;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  transition: background 0.15s;
+}
+
+select:hover,
+button:hover {
+  background: #0f172a;
+  background: #334155;
+  filter: brightness(125%);
+  box-shadow: 0.25rem 0.25rem 0.5rem #020617;
+}
+
+button:active {
+  background: #0f172a;
+}
+
+game-board {
+  box-sizing: content-box;
+  --width: 10;
+  --height: 10;
+  --bg: #334155;
+  display: block;
+  position: relative;
+  margin: auto;
+  width: calc(var(--width) * var(--tile-size));
+  height: calc(var(--height) * var(--tile-size));
+}
+
+game-board:before {
+  --offset: calc(var(--tile-size) / -4);
+  position: absolute;
+  content: '';
+  background: var(--bg);
+  background-image: linear-gradient(to bottom right, #475569, #64748b, #475569);
+  border-radius: calc(var(--tile-size) / 4);
+  box-shadow: 0.5rem 0.5rem 2rem #020617;
+  top: var(--offset);
+  left: var(--offset);
+  bottom: var(--offset);
+  right: var(--offset);
+}
+
+.win game-board:before {
+  background: #475569;
+  opacity: 0.5;
+}
+
+game-shape {
+  position: absolute;
+  left: calc(var(--x) * var(--tile-size));
+  top: calc(var(--y) * var(--tile-size));
+  transition: filter 0.2s;
+}
+
+game-slot,
+game-gap,
+game-block {
+  position: absolute;
+  width: var(--tile-size);
+  height: var(--tile-size);
+  left: calc(var(--x) * var(--tile-size));
+  top: calc(var(--y) * var(--tile-size));
+}
+
+game-block {
+  --shadowA: inset 1px 1px 0 1px rgba(255 255 255 / 0.25);
+  --shadowB: inset -1px -1px 0 1px rgba(0 0 0 / 0.25);
+  box-shadow: var(--shadowA), var(--shadowB);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  cursor: move;
+}
+
+game-shape:hover {
+  z-index: 40;
+  filter: brightness(1.2);
+  cursor: pointer;
+}
+
+game-slot {
+  --bg: #020617;
+  --bg: rgba(0 0 20 / 0.5);
+  --rounded: calc(var(--tile-size) / 8);
+  background: var(--bg);
+  border: 4px solid transparent;
+}
+
+.block-0 {
+  --bg: #0284c7;
+}
+
+.block-1 {
+  --bg: #eab308;
+}
+
+.block-2 {
+  --bg: #16a34a;
+}
+
+.block-3 {
+  --bg: #6d28d9;
+}
+
+.block-4 {
+  --bg: #be123c;
+}
+
+.block-5 {
+  --bg: #a21caf;
+}
+
+.block-6 {
+  --bg: #64748b;
+}
+
+game-shape {
+  z-index: 10;
+}
+
+game-shape.illegal game-block:after,
+game-shape.active game-block:after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  box-shadow: 0 0 0 2px rgba(255 255 255 / 0.75);
+}
+
+game-shape.active game-block {
+  box-shadow: var(--shadowA), var(--shadowB),
+    1rem 1rem 1rem rgba(0 0 0 / 0.5);
+}
+
+game-shape.illegal game-block {
+  box-shadow: var(--shadowA), var(--shadowB),
+    1rem 1rem 1rem rgba(0 0 0 / 0.5);
+}
+
+game-shape.illegal game-block:after {
+  box-shadow: 0 0 0 2px rgba(255 0 0 / 0.75);
+}
+
+.hidden {
+  visibility: hidden;
+}
+
+.illegal {
+  z-index: 30;
+}
+
+.active {
+  z-index: 50;
+}
+
+@keyframes blockwin {
+  0% {
+  }
+  25% {
+    --bg: #fff;
+    background: var(--bg);
+    box-shadow: 0 0 1rem var(--bg);
+  }
+  50% {
+    box-shadow: none;
+  }
+  100% {
+    --bg: transparent;
+    background: var(--bg);
+    box-shadow: none;
+  }
+}
+
+.win game-block {
+  animation: blockwin 1s forwards;
+}
+
+.win game-slot {
+  opacity: 0.5;
+}
+
+.btn-next {
+  transition: all 0.2s;
+}
+
+.btn-next:hover,
+.win .btn-next {
+  background: #065f46;
+  color: #a7f3d0;
+}
+
+.btn-next:hover {
+  filter: brightness(150%);
+}
+
+.win .btn-next {
+  display: inline-flex;
+}

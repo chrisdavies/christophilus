@@ -1,8 +1,11 @@
 {
-  "name": "/src",
-  "module": "index.ts",
+  "name": "christophilus",
   "type": "module",
   "private": true,
+  "scripts": {
+    "dev": "bun --watch dev.ts",
+    "build": "bun build.ts"
+  },
   "devDependencies": {
     "@types/bun": "latest"
   },
