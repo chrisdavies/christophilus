@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claude Code Example | Christophilus</title>
+  <link rel="icon" href="../../games/favicon.svg">
+  <link rel="stylesheet" href="../index.css">
+</head>
+<body>
+  <nav class="site-nav">
+    <a href="../../" class="logo"><img src="../../games/favicon.svg" alt="Home"></a>
+    <a href="../">&larr; Blog</a>
+  </nav>
+  <article>
+    <header>
+      <time datetime="2026-01-09">Jan 9, 2026</time>
+    </header>
+    <h1>Claude Code Example</h1>
+<p>I've used Claude Code off an on for around a year, using it heavily in the last few months. I thought it might be helpful for others (and maybe my future self) if I jotted down an example scenario and a specific prompt I used.</p>
+<h2>Overly general guidance</h2>
+<p>I recently asked it to build a feature for me-- a calendar view that organization admins could use to see all scheduled activity across their entire organization. An organization might have multiple instructors, each of which is creating and leading multiple courses, any of which might have scheduled meetings and modules. Each course has its own calendar view, but until recently, there was no way for admins to get a high-level calendar view for the entire organization.</p>
+<p>So, I tasked Claude Code with this, and it built it in a few minutes. It didn't take long before I realized the solution was pretty terrible.</p>
+<p>Claude had:</p>
+<ul><li>Attempted to use kysely (a database library we don't use)</li><li>Decided to pull all courses, instructors, and scheduled items into memory and do the filtering there rather than in Postgres</li><li>Sent the entire payload to the browser to do live-processing there</li><li>Made numerous glaring mistakes in the Preact layer</li></ul>
+<p>Some other things I've frequently seen Claude do:</p>
+<ul><li>N+1 queries where a single well-structured query (e.g. a merge or window function) would serve.</li><li>Improper data access validation (for example, not ensuring that ids sent from the client actually belong to / are accessible by the caller).</li></ul>
+<h2>Specific guidance</h2>
+<p>So, here's how I guided it to properly implement the front-end for the calendar feature:</p>
+<h3>Browser</h3>
+<p>The calendar will be driven by a state object:</p>
+<pre><code class="lang-text">// Pseudo
+type State = {
+  // The 1st of the month being viewed
+  start: Date;
+  instructors:
+    | { type: 'all' }
+    | { type: 'some', ids: UUID[] }
+  courses:
+    | { type: 'all' }
+    | { type: 'some', ids: UUID[] }
+  items: Array&lt;'modules' | 'meetings'&gt;;
+};
+
+const defaultState = {
+  start: now().onDay(1),
+  guides: { type: 'all' },
+  courses: { type: 'all' }
+  items: ['modules', 'meetings'],
+};
+
+function Page(props) {
+  const [state, setState] = useState&lt;State&gt;(() =&gt; {
+    try {
+      return JSON.parse(props.params.filter);
+    } catch {
+      return defaultState;
+    }
+  });
+
+  // etc...
+}
+</code></pre>
+<p>Note: We'll have a max size for the ids arrays-- maybe 10 or 20 or something.</p>
+<p>When the state changes, we'll update the URL without triggering a re-render simply so that if the user refreshes, they'll see the same view, and they can also copy / paste the URL with other admins to share the view they're seeing.</p>
+<pre><code class="lang-text">// Pseudo
+useDidUpdateEffect(() =&gt; {
+  const queryStr = JSON.stringify(state);
+  router.rewrite(`${location.pathname}?filter=${encodeURIComponent(queryStr)}`);
+}, [state]);</code></pre>
+<p>The data we display (the side-nav courses, and the items in the calendar, etc) will be loaded from the server any time that filter changes. We can use a debounce if we like. All of this (including race-condition handling) is built into our existing <code>useAsyncData</code> hook:</p>
+<pre><code class="lang-text">const data = useAsyncData(() =&gt; rpx.adminCalendar.load({ ...state, timezone }), [state]);</code></pre>
+<p>Note: We may want to use Zod or something like it to parse the state rather than just parsing it as JSON, so that we <em>force</em> it to conform to the expected shape that we can pass directly to the rpx endpoint.</p>
+<p>Remember to use a functional, immutable approach. Use simple state objects to avoid awkward equality checks and mutations:</p>
+<pre><code class="lang-text">// NO
+const [selectedIds, setSelectedIds] = useState(new Set());
+const toggleId = (id) =&gt; setSelectedIds((ids) =&gt; {
+  if (ids.has(id)) {
+    ids.delete(id);
+  } else {
+    ids.add(id);
+  }
+  return ids;
+});
+
+// YES
+const [selectedIds, setSelectedIds] = useState([]);
+const toggleId = (id) =&gt; setSelectedIds((ids) =&gt; {
+  return ids.includes(id) ? ids.filter((x) =&gt; x !== id) : [...ids, id];
+});</code></pre>
+<h3>Server</h3>
+<p>The endpoint can probably query the information we need by using a single query. For any given date, we want to display the first 2 items, with meetings being prioritized over modules. We'll display <code>+ N more...</code> and allow the user to click that to view all items for a specific date.</p>
+<p>So, our RPC function will end up returning something like this:</p>
+<pre><code class="lang-text">type Item = {
+  id: UUID;
+  timestamp: Date;
+  title: string;
+  type: 'module' | 'meeting';
+};
+
+type DateResult = {
+  date: Date;
+  numItems: number;
+  items: Item;
+};
+
+type ReturnType = {
+  dates: DateResult[];
+};</code></pre>
+<p>We can flesh it out more as we go.</p>
+<ul><li>We should probably use a window function or something like that to efficiently collect the items per date.</li><li>We need to ensure we use the passed timezone so we group the items into the proper date (e.g. an item might be Tuesday in UTC, but Wednesday in the caller's timezone)</li><li>Ensure the results all belong to the current organization, and that the caller is at least an active, valid admin in that organization</li></ul>
+  </article>
+  <footer class="post-nav">
+    <span></span>
+    <a href="./where-do-we-go-from-here.html">Where do we go from here? &rarr;</a>
+  </footer>
+</body>
+</html>
