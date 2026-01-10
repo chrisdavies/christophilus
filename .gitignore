@@ -1,4 +1,5 @@
 .podman/
+.claude/
 
 dist/
 notes/
