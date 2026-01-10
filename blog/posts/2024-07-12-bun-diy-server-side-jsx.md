@@ -175,45 +175,43 @@ function stringifyAttrs(attrs: Record<string, any>) {
   for (const k in attrs) {
     let value = attrs[k];
 
-```
-// We want to specifically handle boolean attributes and treat them
-// as an add / remove operation. For example:
-//
-// <input checked={true} />  -> <input checked />
-// <input checked={false} /> -> <input />
-if (typeof value === 'boolean') {
-  value && (result += ` ${k}`);
-  continue;
-}
+    // We want to specifically handle boolean attributes and treat them
+    // as an add / remove operation. For example:
+    //
+    // <input checked={true} />  -> <input checked />
+    // <input checked={false} /> -> <input />
+    if (typeof value === 'boolean') {
+      value && (result += ` ${k}`);
+      continue;
+    }
 
-// Convert functions to strings, presumably as an event-handler.
-// This would take something like this:
-//
-//   onClick={(e) => { document.title = e.target.textContent; }}>
-//
-// And convert it to this:
-//
-//   onClick="((e) => { document.title = e.target.textContent; })(event)"
-if (typeof value === 'function' && k.startsWith('on')) {
-  value = `(${value})(event)`;
-}
+    // Convert functions to strings, presumably as an event-handler.
+    // This would take something like this:
+    //
+    //   onClick={(e) => { document.title = e.target.textContent; }}>
+    //
+    // And convert it to this:
+    //
+    //   onClick="((e) => { document.title = e.target.textContent; })(event)"
+    if (typeof value === 'function' && k.startsWith('on')) {
+      value = `(${value})(event)`;
+    }
 
-// It can be handy to embed view HTML as an attribute (e.g. so that client
-// scripts can then make use of conditional HTML). This allows us to do
-// something like this:
-//
-// data-moon-icon={<svg>...</svg>}
-if (isJSXResult(value)) {
-  value = value.value;
-}
-// We want to disallow dangerous href values like javascript:alert("hi").
-if (typeof value === 'string' && k === 'href' && isPotentiallyDangerousURL(value)) {
-  // We have a potentially dangerous href value, so we'll
-  // make it blank.
-  value = '';
-}
-result += ` ${k}="${Bun.escapeHTML(value)}"`;
-```
+    // It can be handy to embed view HTML as an attribute (e.g. so that client
+    // scripts can then make use of conditional HTML). This allows us to do
+    // something like this:
+    //
+    // data-moon-icon={<svg>...</svg>}
+    if (isJSXResult(value)) {
+      value = value.value;
+    }
+    // We want to disallow dangerous href values like javascript:alert("hi").
+    if (typeof value === 'string' && k === 'href' && isPotentiallyDangerousURL(value)) {
+      // We have a potentially dangerous href value, so we'll
+      // make it blank.
+      value = '';
+    }
+    result += ` ${k}="${Bun.escapeHTML(value)}"`;
   }
   return result;
 }

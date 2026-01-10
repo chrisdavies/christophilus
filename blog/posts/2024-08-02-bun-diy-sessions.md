@@ -417,20 +417,18 @@ export async function makeSessionMiddleware(args?: MiddlewareArgs): Promise<Midd
     const sessionKey = await parseSession(keys, sessionRequest);
     const res = (await next(sessionRequest, server)) as SessionResponse<unknown>;
 
-```
-// The session has been revoked; remove the cookie.
-if (res.session === revokeSymbol) {
-  return writeSessionCookie(res, '; Expires=0');
-}
+    // The session has been revoked; remove the cookie.
+    if (res.session === revokeSymbol) {
+      return writeSessionCookie(res, '; Expires=0');
+    }
 
-// If data is truthy, we've got a new session value (res.session), or we've
-// done a key rotation (sessionKey !== key) so we need to re-write the session.
-const data = res.session || (sessionKey !== key && sessionRequest.session);
-if (data) {
-  return writeSessionCookie(res, await encrypt(key, JSON.stringify(data)));
-}
-return res;
-```
+    // If data is truthy, we've got a new session value (res.session), or we've
+    // done a key rotation (sessionKey !== key) so we need to re-write the session.
+    const data = res.session || (sessionKey !== key && sessionRequest.session);
+    if (data) {
+      return writeSessionCookie(res, await encrypt(key, JSON.stringify(data)));
+    }
+    return res;
   };
 }
 
