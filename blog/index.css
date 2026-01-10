@@ -188,6 +188,16 @@ hr {
   white-space: nowrap;
 }
 
+.desktop-tag {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  white-space: nowrap;
+  background: var(--bg-light);
+  padding: 0.15em 0.5em;
+  border-radius: 4px;
+  margin-left: 0.5rem;
+}
+
 @media (max-width: 600px) {
   .site-nav {
     padding: 24px 1rem;
