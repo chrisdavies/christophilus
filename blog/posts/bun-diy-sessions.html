@@ -10,7 +10,9 @@
 <body>
   <nav class="site-nav">
     <a href="../../" class="logo"><img src="../../games/favicon.svg" alt="Home"></a>
-    <a href="../">&larr; Blog</a>
+    <a href="../../" class="current">Blog</a>
+    <a href="../../games/">Games</a>
+    <a href="../../about/">About Me</a>
   </nav>
   <article>
     <header>
@@ -334,10 +336,20 @@ const crypto = globalThis.crypto;
     <span class="hl-keyword">const</span> sessionRequest = req as SessionRequest&lt;unknown&gt;;
     <span class="hl-keyword">const</span> sessionKey = <span class="hl-keyword">await</span> parseSession(keys, sessionRequest);
     <span class="hl-keyword">const</span> res = (<span class="hl-keyword">await</span> next(sessionRequest, server)) as SessionResponse&lt;unknown&gt;;
-</code></pre>
-<p>// The session has been revoked; remove the cookie.<br>if (res.session === revokeSymbol) {<br>  return writeSessionCookie(res, '; Expires=0');<br>}</p>
-<p>// If data is truthy, we've got a new session value (res.session), or we've<br>// done a key rotation (sessionKey !== key) so we need to re-write the session.<br>const data = res.session || (sessionKey !== key &amp;&amp; sessionRequest.session);<br>if (data) {<br>  return writeSessionCookie(res, await encrypt(key, JSON.stringify(data)));<br>}<br>return res;</p>
-<pre><code class="lang-text">  };
+
+    <span class="hl-comment">// The session has been revoked; remove the cookie.</span>
+    <span class="hl-keyword">if</span> (res.session === revokeSymbol) {
+      <span class="hl-keyword">return</span> writeSessionCookie(res, <span class="hl-string">'; Expires=0'</span>);
+    }
+
+    <span class="hl-comment">// If data is truthy, we've got a new session value (res.session), or we've</span>
+    <span class="hl-comment">// done a key rotation (sessionKey !== key) so we need to re-write the session.</span>
+    <span class="hl-keyword">const</span> data = res.session || (sessionKey !== key &amp;&amp; sessionRequest.session);
+    <span class="hl-keyword">if</span> (data) {
+      <span class="hl-keyword">return</span> writeSessionCookie(res, <span class="hl-keyword">await</span> encrypt(key, JSON.stringify(data)));
+    }
+    <span class="hl-keyword">return</span> res;
+  };
 }
 </code></pre>
 <h2>Public API</h2>

@@ -163,6 +163,9 @@
             matches.forEach((el) => {
               el.classList.add('match');
               el.classList.remove('flipped');
+              el.addEventListener('animationend', () => {
+                el.classList.add('match-done');
+              }, { once: true });
             });
             currentPlayer().inc();
           } else if (board.querySelectorAll('.flipped').length === 2) {

@@ -10,7 +10,9 @@
 <body>
   <nav class="site-nav">
     <a href="../../" class="logo"><img src="../../games/favicon.svg" alt="Home"></a>
-    <a href="../">&larr; Blog</a>
+    <a href="../../" class="current">Blog</a>
+    <a href="../../games/">Games</a>
+    <a href="../../about/">About Me</a>
   </nav>
   <article>
     <header>
@@ -145,54 +147,88 @@ function isPotentiallyDangerousURL(arg: string) {
 <span class="hl-comment">// so that we can write simple event handlers on the server, and have the</span>
 <span class="hl-comment">// code execute on the client.</span>
 <span class="hl-keyword">function</span> stringifyAttrs(attrs: Record&lt;string, any&gt;) {
-  <span class="hl-keyword">let</span> result = '';
-  <span class="hl-keyword">for</span> (<span class="hl-keyword">const</span> k <span class="hl-keyword">in</span> attrs) {
-    <span class="hl-keyword">let</span> value = attrs[k];
-</code></pre>
-<p>// We want to specifically handle boolean attributes and treat them<br>// as an add / remove operation. For example:<br>//<br>// &lt;input checked={true} /&gt;  -&gt; &lt;input checked /&gt;<br>// &lt;input checked={false} /&gt; -&gt; &lt;input /&gt;<br>if (typeof value === 'boolean') {<br>  value &amp;&amp; (result += <code> ${k}</code>);<br>  continue;<br>}</p>
-<p>// Convert functions to strings, presumably as an event-handler.<br>// This would take something like this:<br>//<br>//   onClick={(e) =&gt; { document.title = e.target.textContent; }}&gt;<br>//<br>// And convert it to this:<br>//<br>//   onClick="((e) =&gt; { document.title = e.target.textContent; })(event)"<br>if (typeof value === 'function' &amp;&amp; k.startsWith('on')) {<br>  value = <code>(${value})(event)</code>;<br>}</p>
-<p>// It can be handy to embed view HTML as an attribute (e.g. so that client<br>// scripts can then make use of conditional HTML). This allows us to do<br>// something like this:<br>//<br>// data-moon-icon={&lt;svg&gt;...&lt;/svg&gt;}<br>if (isJSXResult(value)) {<br>  value = value.value;<br>}<br>// We want to disallow dangerous href values like javascript:alert("hi").<br>if (typeof value === 'string' &amp;&amp; k === 'href' &amp;&amp; isPotentiallyDangerousURL(value)) {<br>  // We have a potentially dangerous href value, so we'll<br>  // make it blank.<br>  value = '';<br>}<br>result += <code> ${k}="${Bun.escapeHTML(value)}"</code>;</p>
-<pre><code class="lang-text">  }
-  return result;
+  <span class="hl-keyword">let</span> result = '<span class="hl-string">';
+  for (const k in attrs) {
+    let value = attrs[k];
+
+    // We want to specifically handle boolean attributes and treat them
+    // as an add / remove operation. For example:
+    //
+    // &lt;input checked={true} /&gt;  -&gt; &lt;input checked /&gt;
+    // &lt;input checked={false} /&gt; -&gt; &lt;input /&gt;
+    if (typeof value === '</span>boolean<span class="hl-string">') {
+      value &amp;&amp; (result += ` ${k}`);
+      continue;
+    }
+
+    // Convert functions to strings, presumably as an event-handler.
+    // This would take something like this:
+    //
+    //   onClick={(e) =&gt; { document.title = e.target.textContent; }}&gt;
+    //
+    // And convert it to this:
+    //
+    //   onClick="((e) =&gt; { document.title = e.target.textContent; })(event)"
+    if (typeof value === '</span><span class="hl-keyword">function</span><span class="hl-string">' &amp;&amp; k.startsWith('</span>on<span class="hl-string">')) {
+      value = `(${value})(event)`;
+    }
+
+    // It can be handy to embed view HTML as an attribute (e.g. so that client
+    // scripts can then make use of conditional HTML). This allows us to do
+    // something like this:
+    //
+    // data-moon-icon={&lt;svg&gt;...&lt;/svg&gt;}
+    if (isJSXResult(value)) {
+      value = value.value;
+    }
+    // We want to disallow dangerous href values like javascript:alert("hi").
+    if (typeof value === '</span>string<span class="hl-string">' &amp;&amp; k === '</span>href<span class="hl-string">' &amp;&amp; isPotentiallyDangerousURL(value)) {
+      // We have a potentially dangerous href value, so we'</span>ll
+      <span class="hl-comment">// make it blank.</span>
+      value = <span class="hl-string">''</span>;
+    }
+    result += <span class="hl-string">` ${k}="${Bun.escapeHTML(value)}"`</span>;
+  }
+  <span class="hl-keyword">return</span> result;
 }
 
-// Fragments are how React and friends represent JSX results that contain
-// multiple leafs without having a wrapper element.
-export function Fragment(...args: Array&lt;{ children: any[] }&gt;) {
-  return { $jsx, value: args.flatMap((arg) =&gt; stringifyChild(arg.children)).join('') };
+<span class="hl-comment">// Fragments are how React and friends represent JSX results that contain</span>
+<span class="hl-comment">// multiple leafs without having a wrapper element.</span>
+<span class="hl-keyword">export</span> <span class="hl-keyword">function</span> Fragment(...args: Array&lt;{ children: any[] }&gt;) {
+  <span class="hl-keyword">return</span> { $jsx, value: args.flatMap((arg) =&gt; stringifyChild(arg.children)).join(<span class="hl-string">''</span>) };
 }
 
-// The first argument is either a tagName or a function. That is, it is either
-// something like "div" or "h1", or it is a function which is itself a JSX
-// component such as:
-//
-// const Hello(props) =&gt; &lt;h1&gt;Hello {props.name}&lt;/h1&gt;
-export function h(tagOrFn: string | ((props: any) =&gt; any), props: any): JSXResult {
-  // We have a function component
-  if (typeof tagOrFn === 'function') {
-    const result = tagOrFn(props);
-    // If a functioni component returns anything other than a JSXResult,
-    // we don't want its output to show up in our final result.
-    return isJSXResult(result) ? result : { $jsx, value: '' };
+<span class="hl-comment">// The first argument is either a tagName or a function. That is, it is either</span>
+<span class="hl-comment">// something like "div" or "h1", or it is a function which is itself a JSX</span>
+<span class="hl-comment">// component such as:</span>
+<span class="hl-comment">//</span>
+<span class="hl-comment">// const Hello(props) =&gt; &lt;h1&gt;Hello {props.name}&lt;/h1&gt;</span>
+<span class="hl-keyword">export</span> <span class="hl-keyword">function</span> h(tagOrFn: string | ((props: any) =&gt; any), props: any): JSXResult {
+  <span class="hl-comment">// We have a function component</span>
+  <span class="hl-keyword">if</span> (<span class="hl-keyword">typeof</span> tagOrFn === <span class="hl-string">'function'</span>) {
+    <span class="hl-keyword">const</span> result = tagOrFn(props);
+    <span class="hl-comment">// If a functioni component returns anything other than a JSXResult,</span>
+    <span class="hl-comment">// we don't want its output to show up in our final result.</span>
+    <span class="hl-keyword">return</span> isJSXResult(result) ? result : { $jsx, value: '<span class="hl-string">' };
   }
 
-  // We're dealing with a tagName like "h1", etc
-  const { children, dangerouslySetInnerHTML, ...attrs } = props;
-  const content = dangerouslySetInnerHTML
+  // We'</span>re dealing with a tagName like <span class="hl-string">"h1"</span>, etc
+  <span class="hl-keyword">const</span> { children, dangerouslySetInnerHTML, ...attrs } = props;
+  <span class="hl-keyword">const</span> content = dangerouslySetInnerHTML
     ? dangerouslySetInnerHTML.__html
     : stringifyChild(children);
 
-  // We have a self-closing tag
-  if (voidElementNames.has(tagOrFn)) {
-    return { $jsx, value: `&lt;${tagOrFn}${stringifyAttrs(attrs)} /&gt;` };
+  <span class="hl-comment">// We have a self-closing tag</span>
+  <span class="hl-keyword">if</span> (voidElementNames.has(tagOrFn)) {
+    <span class="hl-keyword">return</span> { $jsx, value: <span class="hl-string">`&lt;${tagOrFn}${stringifyAttrs(attrs)} /&gt;`</span> };
   }
-  return { $jsx, value: `&lt;${tagOrFn}${stringifyAttrs(attrs)}&gt;${content}&lt;/${tagOrFn}&gt;` };
+  <span class="hl-keyword">return</span> { $jsx, value: <span class="hl-string">`&lt;${tagOrFn}${stringifyAttrs(attrs)}&gt;${content}&lt;/${tagOrFn}&gt;`</span> };
 }
 
-// This helper lets us change the shape of JSXResult without breaking
-// callers.
-export function renderToString(result: JSXResult) {
-  return result.value;
+<span class="hl-comment">// This helper lets us change the shape of JSXResult without breaking</span>
+<span class="hl-comment">// callers.</span>
+<span class="hl-keyword">export</span> <span class="hl-keyword">function</span> renderToString(result: JSXResult) {
+  <span class="hl-keyword">return</span> result.value;
 }</code></pre>
   </article>
   <footer class="post-nav">
