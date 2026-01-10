@@ -173,6 +173,13 @@ game-tile.match {
   animation: flashmatch 5s forwards;
 }
 
+game-tile.match-done {
+  animation: none;
+  transition: none;
+  opacity: 0;
+  pointer-events: none;
+}
+
 game-tile:not(.flipped):hover {
   background: #1e293b;
   box-shadow:
