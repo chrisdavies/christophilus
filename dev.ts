@@ -33,14 +33,8 @@ watch("./games", { recursive: true }, async (event, filename) => {
   console.log("Rebuilt!");
 });
 
-watch("./index.html", async () => {
-  console.log("Change: index.html");
-  await $`bun build.ts`.quiet();
-  console.log("Rebuilt!");
-});
-
-watch("./index.css", async () => {
-  console.log("Change: index.css");
+watch("./build.ts", async () => {
+  console.log("Change: build.ts");
   await $`bun build.ts`.quiet();
   console.log("Rebuilt!");
 });

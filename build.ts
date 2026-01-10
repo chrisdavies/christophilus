@@ -125,7 +125,16 @@ function aboutTemplate(): string {
   ${siteNav("about", "../")}
   <main>
     <h1>About Me</h1>
-    <p>Coming soon...</p>
+    <p>I'm Chris Davies. I run <a href="https://monacle.co">Monacle</a>, a small software consultancy.</p>
+    <p>I've been building software for 25 years—everything from credit union systems and shipping terminal automation to data visualization tools at Elastic and datacenter infrastructure at Microsoft. I've led teams, taught at a code school, and shipped products from scratch.</p>
+    <p>These days, I help teams and companies in a few ways:</p>
+    <ul>
+      <li><strong>AI-augmented development</strong> — training teams to work effectively with tools like Claude Code</li>
+      <li><strong>Technical leadership</strong> — architecture, system design, and unblocking teams as a fractional CTO or technical advisor</li>
+      <li><strong>Hands-on development</strong> — joining projects to ship features and meet deadlines</li>
+      <li><strong>Startup support</strong> — helping founders get from idea to working product as a technical co-founder</li>
+    </ul>
+    <p>If any of that sounds useful, feel free to reach out: <a href="mailto:chris@monacle.co">chris@monacle.co</a></p>
   </main>
 </body>
 </html>`;
