@@ -39,11 +39,11 @@ function postTemplate(
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${title} | Christophilus</title>
-  <link rel="icon" href="../../games/favicon.svg">
-  <link rel="stylesheet" href="../index.css">
+  <link rel="icon" href="../games/favicon.svg">
+  <link rel="stylesheet" href="./index.css">
 </head>
 <body>
-  ${siteNav("blog", "../../")}
+  ${siteNav("blog", "../")}
   <article>
     <header>
       <time datetime="${date}">${formatDate(date)}</time>
@@ -60,7 +60,7 @@ function postTemplate(
 
 function indexTemplate(posts: { title: string; date: string; slug: string }[], isNested = false): string {
   const basePath = isNested ? "../" : "./";
-  const postsPath = isNested ? "./posts/" : "./blog/posts/";
+  const postsPath = isNested ? "./" : "./blog/";
   const cssPath = isNested ? "./index.css" : "./blog/index.css";
 
   const list = posts
@@ -153,7 +153,7 @@ function formatDate(date: string): string {
 console.log("Building site to dist/...\n");
 
 // Create dist directories
-await mkdir(`${DIST}/blog/posts`, { recursive: true });
+await mkdir(`${DIST}/blog`, { recursive: true });
 await mkdir(`${DIST}/about`, { recursive: true });
 
 // Copy static files
@@ -222,7 +222,7 @@ for (let i = 0; i < posts.length; i++) {
   const next = i > 0 ? posts[i - 1] : null; // newer
 
   const html = postTemplate(post.title, post.date, post.html, prev, next);
-  await writeFile(`${DIST}/blog/posts/${post.slug}.html`, html);
+  await writeFile(`${DIST}/blog/${post.slug}.html`, html);
 }
 
 // Generate blog index at root and /blog/
