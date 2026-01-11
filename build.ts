@@ -58,10 +58,14 @@ function postTemplate(
 </html>`;
 }
 
-function indexTemplate(posts: { title: string; date: string; slug: string }[]): string {
+function indexTemplate(posts: { title: string; date: string; slug: string }[], isNested = false): string {
+  const basePath = isNested ? "../" : "./";
+  const postsPath = isNested ? "./posts/" : "./blog/posts/";
+  const cssPath = isNested ? "./index.css" : "./blog/index.css";
+
   const list = posts
     .sort((a, b) => b.date.localeCompare(a.date))
-    .map((p) => `<li><a href="./blog/posts/${p.slug}.html">${p.title}</a><time datetime="${p.date}">${formatDate(p.date)}</time></li>`)
+    .map((p) => `<li><a href="${postsPath}${p.slug}.html">${p.title}</a><time datetime="${p.date}">${formatDate(p.date)}</time></li>`)
     .join("\n      ");
 
   return `<!DOCTYPE html>
@@ -70,11 +74,11 @@ function indexTemplate(posts: { title: string; date: string; slug: string }[]): 
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Blog | Christophilus</title>
-  <link rel="icon" href="./games/favicon.svg">
-  <link rel="stylesheet" href="./blog/index.css">
+  <link rel="icon" href="${basePath}games/favicon.svg">
+  <link rel="stylesheet" href="${cssPath}">
 </head>
 <body>
-  ${siteNav("blog", "./")}
+  ${siteNav("blog", basePath)}
   <main>
     <h1>Blog</h1>
     <ul class="post-list">
@@ -101,10 +105,10 @@ function gamesTemplate(): string {
     <h1>Games</h1>
     <ul class="post-list">
       <li><a href="./tileflip/">Tileflip</a></li>
-      <li><a href="./sokoban/">Sokoban</a><span class="desktop-tag">Desktop</span></li>
+      <li class="desktop-only"><a href="./sokoban/">Sokoban</a><span class="desktop-tag">Desktop</span></li>
       <li><a href="./memoji/">Memoji</a></li>
-      <li><a href="./blockfit/">Blockfit</a><span class="desktop-tag">Desktop</span></li>
-      <li><a href="./gamepad-diagnostic/">Gamepad Diagnostic</a><span class="desktop-tag">Desktop</span></li>
+      <li class="desktop-only"><a href="./blockfit/">Blockfit</a><span class="desktop-tag">Desktop</span></li>
+      <li class="desktop-only"><a href="./gamepad-diagnostic/">Gamepad Diagnostic</a><span class="desktop-tag">Desktop</span></li>
     </ul>
   </main>
 </body>
@@ -221,9 +225,11 @@ for (let i = 0; i < posts.length; i++) {
   await writeFile(`${DIST}/blog/posts/${post.slug}.html`, html);
 }
 
-// Generate blog index at root
+// Generate blog index at root and /blog/
 const indexHtml = indexTemplate(posts);
 await writeFile(`${DIST}/index.html`, indexHtml);
+const blogIndexHtml = indexTemplate(posts, true);
+await writeFile(`${DIST}/blog/index.html`, blogIndexHtml);
 
 // Generate games index
 const gamesHtml = gamesTemplate();
