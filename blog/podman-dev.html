@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Podman dev environment | Christophilus</title>
+  <link rel="icon" href="../games/favicon.svg">
+  <link rel="stylesheet" href="./index.css">
+</head>
+<body>
+  <nav class="site-nav">
+    <a href="../" class="logo"><img src="../games/favicon.svg" alt="Home"></a>
+    <a href="../" class="current">Blog</a>
+    <a href="../games/">Games</a>
+    <a href="../about/">About Me</a>
+  </nav>
+  <article>
+    <header>
+      <time datetime="2025-06-06">Jun 6, 2025</time>
+    </header>
+    <h1>Podman dev environment</h1>
+<p>A couple years ago, after yet another egregious malicious npm package, I changed my dev environment.</p>
+<p>A friend asked me to do a quick write-up, so here you go. You're welcome, Matt.</p>
+<p>I run a lot of little local projects, each of which has their own dependencies. I don't trust the supply chain for all of my Neovim plugins, Ruby gems, Go deps, npm packages, etc. So, I decided to create a little tool based on Podman which allows me to quickly spin up a dev container in any given folder. And sandbox all of my dependencies-- including my dev tools-- inside it.</p>
+<h2>The workflow</h2>
+<p>I <code>cd ./some/folder</code>, then type <code>dev sh</code>, and I'm in a container with <code>./some/folder</code> mounted at <code>/src</code>. That's it.</p>
+<p>I generally spawn a few terminals and run <code>dev sh</code> in each: one for <code>npm start</code> or whatever, one for <code>claude</code> or my terminal-based AI agent, and one for <code>nvim</code>. Could I use tmux or Nvim to multiplex? Yes. Do I want to? No. I like letting my window manager handle this, and it's not a big enough hassle that I've ever considered automating it in any way.</p>
+<h2>Securityish</h2>
+<p>The containers don't have access to anything on the host machine other than the specific folder from which I ran my <code>dev sh</code> command and any ports which my <code>.podman/env</code> file directs it to expose.</p>
+<p>Since it's podman, it is rootless. This means, if anything running in the container gets out onto my host machine, at least it won't be running with root privileges.</p>
+<h2>No orchestration</h2>
+<p>I install <em>all</em> of my dependencies in the container. This includes my editor (Neovim and various plugins), database (generally Postgres using pgenv), Claude Code, etc.</p>
+<p>Basically, I treat my podman containers as if they're a traditional virtual machine. I put everything in there. I don't bother with docker compose or whatever. That's for CI and production pipelines. On my dev box, every project is a single container, and it's super simple.</p>
+<p>Terminal-based tools work really well here. Neovim and Claude Code run in the containers, so I don't have to fiddle with trying to get my IDE or whatever to understand that I'm using docker.</p>
+<p>I don't need to worry (as much) about Claude Code or a rogue Neovim plugin grabbing stuff they shouldn't. They can only grab what's in my container which is never super sensitive info.</p>
+<h2>Arch</h2>
+<p>I've used Debian, Fedora, and Arch-based images, but I've settled on Arch. This is mainly because I like to have the latest packages. If I need a specific version of a thing, I'll install that thing using a tool like <code>pgenv</code> for Postgres, or <code>nvm</code> for Node. For everything else, I just use Arch's package manager.</p>
+<h2>Niri</h2>
+<p>On my host machine, I run Fedora or Arch with Niri as the window manager. Niri is awesome. Spawning, switching between, and closing windows is natural, and my hands barely have to move to make it happen.</p>
+<p>I never liked tiling WMs, because I can't do anything useful in a tiny square. Niri gives each window full height and a decent width by default, and simply places all of your windows in an infinite horizontal line. I quickly move between windows using the Super key + vim motions (e.g. <code>Super+l</code> focuses the window to the right <code>Super+h</code> focuses the window to the left). Resizing windows, moving them, stacking or unstacking them centering / uncentering them, etc are all very quick operations with efficient keybindings to keep me in my flow state.</p>
+<p>Speaking of flow-state, I spawn a lot of ad-hoc terminal instances. I use the Foot terminal because it launches instantly and is very light-weight by modern terminal standards, so I can go from "I wonder what the output of <code>foo bar</code> is?" to spawning + running that command instantly without interrupting my flow-state.</p>
+<p>Basically, Niri + Foot + Podman = &lt;3.</p>
+  </article>
+  <footer class="post-nav">
+    <a href="./claude-code-and-bun.html">&larr; Claude and Bun</a>
+    <a href="./firebird.html">Firebird &rarr;</a>
+  </footer>
+</body>
+</html>

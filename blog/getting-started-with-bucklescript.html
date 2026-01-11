@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bucklescript getting started | Christophilus</title>
+  <link rel="icon" href="../games/favicon.svg">
+  <link rel="stylesheet" href="./index.css">
+</head>
+<body>
+  <nav class="site-nav">
+    <a href="../" class="logo"><img src="../games/favicon.svg" alt="Home"></a>
+    <a href="../" class="current">Blog</a>
+    <a href="../games/">Games</a>
+    <a href="../about/">About Me</a>
+  </nav>
+  <article>
+    <header>
+      <time datetime="2016-09-03">Sep 3, 2016</time>
+    </header>
+    <h1>Bucklescript getting started</h1>
+<p>Interested in <a href="https://github.com/bloomberg/bucklescript">Bucklescript</a>? You should be. It's OCaml that compiles to JavaScript. But unlike most compile-to-JS langauges, it's really, really good. Fast. Produces small, legible JavaScript. And it's got some of the best type inference in the business.</p>
+<p>Here's how I got up and running on my Mac.</p>
+<h2>Install OCaml and friends</h2>
+<p>First, <a href="https://ocaml.org/docs/install.html">install OCaml</a>. On Mac, this is done like so:</p>
+<pre><code class="lang-text">brew install ocaml
+brew install opam
+opam install merlin utop ocp-indent</code></pre>
+<p>Opam is the package manager (e.g. like NPM, gems, nuget) for OCaml.</p>
+<ul><li>utop: a really, really nice REPL.</li><li>merlin: a sweet tool for adding IDE-like features to VSCode, vim, etc</li><li>ocp-indent: a tool for helping auto-indent your .ml files</li></ul>
+<h2>Setup VS Code:</h2>
+<p><a href="https://github.com/hackwaly/vscode-ocaml">https://github.com/hackwaly/vscode-ocaml</a></p>
+<h2>Set up BuckleScript</h2>
+<pre><code class="lang-text">mkdir avl
+cd avl
+npm init
+npm install --save bs-platform</code></pre>
+<p>Edit <code>package.json</code> and make scripts look like this:</p>
+<pre><code class="lang-text">"scripts" : {
+    "build" : "bsc -c avl.ml"
+}</code></pre>
+<h2>Test that it all works</h2>
+<p>Create <code>hi.ml</code> and make it look like this:</p>
+<pre><code class="lang-ocaml"><span class="hl-keyword">let</span> () =
+  print_endline <span class="hl-string">"hello world"</span></code></pre>
+<p>Run</p>
+<pre><code class="lang-text">npm run build
+node hi.js</code></pre>
+<p>You should see "hello world" get printed.</p>
+<p>Noice!</p>
+  </article>
+  <footer class="post-nav">
+    <a href="./avl-tree-in-bucklescript-part-2.html">&larr; AVL tree in Bucklescript (part 2)</a>
+    <a href="./why-you-cant-be-a-good-net-developer.html">Why you can't be a good .NET developer &rarr;</a>
+  </footer>
+</body>
+</html>

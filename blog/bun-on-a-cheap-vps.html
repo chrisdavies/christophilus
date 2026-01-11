@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Running A Bun Service On A Cheap VPS | Christophilus</title>
+  <link rel="icon" href="../games/favicon.svg">
+  <link rel="stylesheet" href="./index.css">
+</head>
+<body>
+  <nav class="site-nav">
+    <a href="../" class="logo"><img src="../games/favicon.svg" alt="Home"></a>
+    <a href="../" class="current">Blog</a>
+    <a href="../games/">Games</a>
+    <a href="../about/">About Me</a>
+  </nav>
+  <article>
+    <header>
+      <time datetime="2024-07-04">Jul 4, 2024</time>
+    </header>
+    <h1>Running A Bun Service On A Cheap VPS</h1>
+<p>Today, I spun up a Bun service on a Hetzner VPS. It was pretty straightforward, but I thought I'd share my notes.</p>
+<h2>Config</h2>
+<p>Spinning up a new VPS on Hetzner was simple. I took <a href="https://community.hetzner.com/tutorials/basic-cloud-config">Hetzner's example config</a> and tweaked it to include automatic updates:</p>
+<pre><code class="lang-yaml">#cloud-config
+users:
+  - name: {YOUR_USER_NAME}
+    groups: users, admin
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - {YOUR_PUBLIC_SSH_KEY}
+packages:
+  - fail2ban
+  - ufw
+  - unattended-upgrades
+  - apt-listchanges
+package_update: true
+package_upgrade: true
+runcmd:
+  - printf "[sshd]\nenabled = true\nbanaction = iptables-multiport" &gt; /etc/fail2ban/jail.local
+  - systemctl enable fail2ban
+  - ufw allow ssh
+  - ufw allow http
+  - ufw allow https
+  - ufw enable
+  - sed -i -e '/^\(#\|\)PermitRootLogin/s/^.*$/PermitRootLogin no/' /etc/ssh/sshd_config
+  - sed -i -e '/^\(#\|\)PasswordAuthentication/s/^.*$/PasswordAuthentication no/' /etc/ssh/sshd_config
+  - sed -i -e '/^\(#\|\)KbdInteractiveAuthentication/s/^.*$/KbdInteractiveAuthentication no/' /etc/ssh/sshd_config
+  - sed -i -e '/^\(#\|\)ChallengeResponseAuthentication/s/^.*$/ChallengeResponseAuthentication no/' /etc/ssh/sshd_config
+  - sed -i -e '/^\(#\|\)MaxAuthTries/s/^.*$/MaxAuthTries 2/' /etc/ssh/sshd_config
+  - sed -i -e '/^\(#\|\)AllowTcpForwarding/s/^.*$/AllowTcpForwarding no/' /etc/ssh/sshd_config
+  - sed -i -e '/^\(#\|\)X11Forwarding/s/^.*$/X11Forwarding no/' /etc/ssh/sshd_config
+  - sed -i -e '/^\(#\|\)AllowAgentForwarding/s/^.*$/AllowAgentForwarding no/' /etc/ssh/sshd_config
+  - sed -i -e '/^\(#\|\)AuthorizedKeysFile/s/^.*$/AuthorizedKeysFile .ssh\/authorized_keys/' /etc/ssh/sshd_config
+  - sed -i '$a AllowUsers {YOUR_USER_NAME}' /etc/ssh/sshd_config
+  - systemctl enable unattended-upgrades
+  - reboot</code></pre>
+<h2>Verifying the SSH signature</h2>
+<p>My VPS was ready in a few seconds. (It was ready so fast, I thought maybe something hadn't worked.) When I first SSHed into the box, I was given a message like this:</p>
+<pre><code class="lang-text">The authenticity of host '...' can't be established.
+ED25519 key fingerprint is SHA256:....</code></pre>
+<p>To verify the key, I ran:</p>
+<pre><code class="lang-bash">ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub</code></pre>
+<h2>Installing Caddy</h2>
+<p>Once in, it was time to <a href="https://caddyserver.com/docs/install#debian-ubuntu-raspbian">install Caddy</a>:</p>
+<pre><code class="lang-bash"><span class="hl-keyword">sudo</span> apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
+curl -1sLf <span class="hl-string">'https://dl.cloudsmith.io/public/caddy/stable/gpg.key'</span> | <span class="hl-keyword">sudo</span> gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf <span class="hl-string">'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt'</span> | <span class="hl-keyword">sudo</span> tee /etc/apt/sources.list.d/caddy-stable.list
+<span class="hl-keyword">sudo</span> apt update
+<span class="hl-keyword">sudo</span> apt install caddy</code></pre>
+<p>I hit <code>https://{IP_ADDRESS}</code> and saw a default Caddy page. Nice! It told me to do the following:</p>
+<pre><code class="lang-text">Point your domain's A/AAAA DNS records at this machine.
+Upload your site's files to /var/www/html.
+Edit your Caddyfile at /etc/caddy/Caddyfile:
+    Replace :80 with your domain name
+    Change the site root to /var/www/html
+Reload the configuration: systemctl reload caddy
+Visit your site!</code></pre>
+<p>I love the way Caddy presented that. This is the way dev-tooling should be. Anyway, I'm ignoring all of that advice, since I'm going to instead proxy a Bun service.</p>
+<h2>Hello, Bun!</h2>
+<p>I pointed a test domain at my IP address, <a href="https://bun.sh/docs/installation">installed Bun</a>, then created a little hello-world script:</p>
+<pre><code class="lang-ts"><span class="hl-comment">// /home/{YOUR_USER_NAME}/hello-world/hi.ts</span>
+<span class="hl-keyword">const</span> port = <span class="hl-number">3000</span>;
+
+Bun.serve({
+  fetch(req) {
+    <span class="hl-keyword">return</span> <span class="hl-keyword">new</span> Response(<span class="hl-string">"Hello, world!"</span>);
+  },
+});
+
+console.log(<span class="hl-string">'Listening on'</span>, port);</code></pre>
+<p>Next, I ran my server manually:</p>
+<pre><code class="lang-bash">bun hi.ts</code></pre>
+<p>And, I modified <code>/etc/caddy/Caddyfile</code> to look like this:</p>
+<pre><code class="lang-text">{DOMAIN_NAME} {
+  reverse_proxy :3000
+}</code></pre>
+<p>Hey, presto! Everything worked. I can now see <code>Hello, world!</code> over HTTPS from any browser on the planet. Neato.</p>
+<h2>Systemd</h2>
+<p>I want my Bun service to run automatically when the server restarts, or after a crash. To do that, I <a href="https://bun.sh/guides/ecosystem/systemd">created a systemd service</a> like so:</p>
+<pre><code class="lang-bash"><span class="hl-comment"># /etc/systemd/system/hello-world.service</span>
+[Unit]
+Description=Hello world web service
+After=network.target
+
+[Service]
+Type=simple
+User={YOUR_USER_NAME}
+WorkingDirectory=/home/{YOUR_USER_NAME}/hello-world
+ExecStart=/home/{YOUR_USER_NAME}/.bun/bin/bun run hi.ts
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+</code></pre>
+<p>I enabled and started it:</p>
+<pre><code class="lang-bash"><span class="hl-keyword">sudo</span> systemctl enable hello-world
+<span class="hl-keyword">sudo</span> systemctl start hello-world</code></pre>
+<h2>Checking the status of everything</h2>
+<p>Lastly, I created a cheatsheet of the stuff I might want to hop in and check later:</p>
+<pre><code class="lang-bash"><span class="hl-comment"># Review statuses, logs, etc</span>
+<span class="hl-comment"># View unattended-upgrades logs here:</span>
+<span class="hl-comment">#</span>
+<span class="hl-comment">#   /var/log/unattended-upgrades/</span>
+<span class="hl-comment">#</span>
+<span class="hl-keyword">sudo</span> unattended-upgrades --dry-run --debug
+<span class="hl-keyword">sudo</span> fail2ban-client status ssh
+<span class="hl-keyword">sudo</span> ufw status
+<span class="hl-keyword">sudo</span> systemctl status hello-world
+<span class="hl-keyword">sudo</span> systemctl status caddy
+<span class="hl-keyword">sudo</span> journalctl -u caddy -f</code></pre>
+<h2>That's all, folks</h2>
+<p>And that's it. A working Bun service running on a cheap Hetzner VPS, served over https.</p>
+<p>Happy hacking.</p>
+  </article>
+  <footer class="post-nav">
+    <a href="./bun-diy-live-reload.html">&larr; Bun: DIY Live Reload</a>
+    <a href="./project-structure.html">Project structure &rarr;</a>
+  </footer>
+</body>
+</html>

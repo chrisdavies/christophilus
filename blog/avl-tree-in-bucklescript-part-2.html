@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AVL tree in Bucklescript (part 2) | Christophilus</title>
+  <link rel="icon" href="../games/favicon.svg">
+  <link rel="stylesheet" href="./index.css">
+</head>
+<body>
+  <nav class="site-nav">
+    <a href="../" class="logo"><img src="../games/favicon.svg" alt="Home"></a>
+    <a href="../" class="current">Blog</a>
+    <a href="../games/">Games</a>
+    <a href="../about/">About Me</a>
+  </nav>
+  <article>
+    <header>
+      <time datetime="2016-09-03">Sep 3, 2016</time>
+    </header>
+    <h1>AVL tree in Bucklescript (part 2)</h1>
+<h2>AKA Unit testing with Mocha</h2>
+<p>Now that we've <a href="({{ site.baseurl }}{% post_url 2016-09-03-avl-tree-in-bucklescript-part-1 %}">written our binary search tree</a>), it's time to test it. We're going to use <a href="https://mochajs.org/">mocha</a> because its hella fast. Also, Bucklescript's documentation sort of suggests it might be a first-class Bucklescript citizen at some point.</p>
+<h2>FFI</h2>
+<p>Mocha is a JavaScript unit testing framework. Since it's not ML, we've got to do some tricks in order for Bucklescript to understand it. We've got to use foreign function interfaces (FFI). Sounds complicated. It's really not.</p>
+<p>First, install mocha:</p>
+<pre><code class="lang-text">npm install --save-dev mocha</code></pre>
+<p>Next, create a <code>bs-test</code> folder.</p>
+<p>Now, let's do some FFI. Create a file <code>bs-test/mocha.ml</code>. In here, we're going to define a bunch of functions that tell OCaml about the mocha library.</p>
+<pre><code class="lang-ocaml">external describe : string -&gt; (unit -&gt; unit) -&gt; unit = <span class="hl-string">""</span> [@@bs.<span class="hl-keyword">val</span>]
+
+external it : string -&gt; (unit -&gt; unit) -&gt; unit = <span class="hl-string">""</span> [@@bs.<span class="hl-keyword">val</span>]
+
+external eq : 'a -&gt; 'a -&gt; unit = <span class="hl-string">"deepEqual"</span>
+    [@@bs.<span class="hl-keyword">module</span> <span class="hl-string">"assert"</span>]
+
+<span class="hl-keyword">let</span> assert_equal = eq
+<span class="hl-keyword">let</span> assert_notequal = neq
+
+exception Fail <span class="hl-keyword">of</span> string</code></pre>
+<p>I ripped most of these straight out of the <a href="https://github.com/bloomberg/bucklescript-addons/tree/master/bindings/bs-mocha">Bucklescript addons</a> repo, which seemed a bit stale and gave me some issues.</p>
+<p>So, what's going on with this code? Let's look at a few lines. First:</p>
+<p><code>external describe : string -&gt; (unit -&gt; unit) -&gt; unit = "" [@@bs.val]</code></p>
+<ul><li>external - tells OCaml this function is defined in an outside (Js) package</li><li>describe - the name of the external function</li><li><code>: string -&gt; (unit -&gt; unit) -&gt; unit</code></li></ul>
+<p>  - This is a type definition it says that the define function<br>  - Takes a string as its first argument<em><br>  - Takes a function as its second argument</em><br>    - This function takes no arguments has no return value<br>  - The define function returns no value</p>
+<ul><li><code>= ""</code> - tells OCaml that the external name is the same as the name we just defined (describe)</li><li><code>[@@bs.val]</code> - binds to a JavaScript value... don't ask. Just do it.</li></ul>
+<p>Note: All OCaml functions are auto-curried and take only one argument, but you don't need to worry about that right now.</p>
+<h2>Writing our first test</h2>
+<p>Now, we're ready to start consuming some mocha functions. Create <code>bs-test/avl_test.ml</code> and make it look like this:</p>
+<pre><code class="lang-ocaml"><span class="hl-keyword">open</span> Avl
+<span class="hl-keyword">open</span> Mocha
+
+<span class="hl-keyword">let</span> assert_value s node =
+  <span class="hl-keyword">match</span> node <span class="hl-keyword">with</span>
+  | Some ({value} as n) -&gt; assert_equal s value; n
+  | _ -&gt; raise (Fail (<span class="hl-string">"Expected "</span> ^ s ^ <span class="hl-string">" bug got None"</span>))
+
+<span class="hl-keyword">let</span> () =
+  describe <span class="hl-string">"Insert"</span> (<span class="hl-keyword">fun</span> () -&gt;
+    it <span class="hl-string">"should create a node"</span> (<span class="hl-keyword">fun</span> () -&gt;
+      insert_node <span class="hl-string">"hi"</span> None
+      |&gt; assert_value <span class="hl-string">"hi"</span>
+      |&gt; ignore
+    );
+  )</code></pre>
+<p>What's with all these weird symbols, you ask? Patience, young Skywalker.</p>
+<p>The open statements bring the functions from outside modules into our file. Here, we're importing our Avl functions (defined in part 1) and our Mocha functions (defined above).</p>
+<p>Next, we define a little helper function <code>assert_value</code>. There are a handful of new concepts in it.</p>
+<p>First, there's a semicolon <code>assert_equal s value; n</code>. That allows our match to run two statements, rather than the usual one. It's going to run an <code>assert_equal</code> and then it's going to return <code>n</code>.</p>
+<p>Second, there's the raise statement. This is how you throw exceptions in OCaml.</p>
+<p>Lastly, there's the <code>^</code> string concatenation operator.</p>
+<h2>Partial application</h2>
+<p>Remember how I noted that OCaml functions all take a single argument? Well, that's what allows us to write <code>assert_value "hi"</code> in the unit test above.</p>
+<p>You may remember that we defined <code>assert_value</code> like so: <code>let assert_value s node =</code>. It takes two arguments. So what's happening when we call it with only one argument?</p>
+<p>It returns a function. If this were JavaScript (ES5), <code>assert_value</code> might look like this:</p>
+<pre><code class="lang-js"><span class="hl-keyword">function</span> assert_value(s) {
+  <span class="hl-keyword">return</span> <span class="hl-keyword">function</span> (node) {
+    assert_equal(node.value, s)
+  }
+}</code></pre>
+<p>So you can see that we could then call this JavaScript function like so <code>assert_value("hi")</code> and it will return us a brand spanking new function.</p>
+<p>OCaml does this for us automatically. It's a powerful combination of <a href="https://en.wikipedia.org/wiki/Currying">currying</a> and <a href="https://en.wikipedia.org/wiki/Partial_application">partial application</a>.</p>
+<p>One last thing to note is that all of our AVL functions take their arguments in this order: <code>insert_node v root</code>. Value first, then the node that is being operated on. This is handy because it allows us to define useful partially-applied versions of our AVL functions. When thinking about the order of your function arguments, spend a wee bit of time thinking about how they might be partially applied and order accordingly.</p>
+<h2>The pipe operator</h2>
+<p>Now we're ready to talk about the funny <code>|&gt;</code> operator in our test code. This looks odd to most non-ML programmers. It's called the pipe operator. And it is superfly.</p>
+<pre><code class="lang-ocaml">  insert_node <span class="hl-string">"hi"</span> None
+  |&gt; assert_value <span class="hl-string">"hi"</span>
+  |&gt; ignore</code></pre>
+<p>What this is doing is saying, call <code>insert_node "hi" None</code> and pass its return value into <code>assert_value "hi"</code> and pass <em>that</em> function's return value into the <code>ignore</code> function which returns a unit (which is what our Mocha functions expect).</p>
+<p>It's the same as writing this:</p>
+<pre><code class="lang-ocaml">ignore (assert_value <span class="hl-string">"hi"</span> (insert_node <span class="hl-string">"hi"</span> None))</code></pre>
+<p>Ew gross. Don't do that. Use <code>|&gt;</code>, mkay?</p>
+<h2>How about running our tests?</h2>
+<p>"OK, OK, nifty", you say, "but what good are tests if we don't run them?"</p>
+<p>Take it easy there, chum. We're getting to that.</p>
+<p>Modify your <code>package.json</code> to have this definition for test:</p>
+<pre><code class="lang-text">"test": "bsc -bs-package-name $npm_package_name -bs-package-output test -I src -I bs-test -c -bs-files src/*.ml bs-test/*.ml &amp;&amp; mocha",</code></pre>
+<p>That's a mouthful. It's compiling our <code>src</code> and <code>bs-test</code> directories and dumping the result into a folder called <code>test</code>. Then it runs mocha which expects lovely JavaScript tests to exist in the <code>test</code> folder. So make sure you've created all of those folders.</p>
+<p>Save the file, and head over to your terminal. You should be able to run:</p>
+<pre><code class="lang-text">npm test</code></pre>
+<p>And you should see some nice green tests passing.</p>
+<h2>Test all the things</h2>
+<p>Well, most of the things... Here's my amazing test suite for our binary search tree. I'll leave you to work through it, if you like.</p>
+<pre><code class="lang-ocaml"><span class="hl-keyword">open</span> Avl
+<span class="hl-keyword">open</span> Mocha
+
+<span class="hl-comment">(* A convenience function for building a tree from a list of values *)</span>
+<span class="hl-keyword">let</span> make_tree vals =
+  <span class="hl-keyword">let</span> <span class="hl-keyword">rec</span> make_tree_rec node vals =
+    <span class="hl-keyword">match</span> vals <span class="hl-keyword">with</span>
+    | []       -&gt; node
+    | hd :: tl -&gt; make_tree_rec (insert_node hd node) tl
+  <span class="hl-keyword">in</span> make_tree_rec None vals
+
+<span class="hl-comment">(* A convenience function asserting a node has a specific value *)</span>
+<span class="hl-keyword">let</span> assert_value s node =
+  <span class="hl-keyword">match</span> node <span class="hl-keyword">with</span>
+  | Some ({value} as n) -&gt; assert_equal s value; n
+  | _ -&gt; raise (Fail (<span class="hl-string">"Expected "</span> ^ s ^ <span class="hl-string">" bug got None"</span>))
+
+<span class="hl-comment">(* A convenience function for asserting that we expect None *)</span>
+<span class="hl-keyword">let</span> assert_empty = assert_equal None
+
+<span class="hl-keyword">let</span> get_right node = node.right
+<span class="hl-keyword">let</span> get_left node = node.left
+
+<span class="hl-keyword">let</span> () =
+  describe <span class="hl-string">"Insert"</span> (<span class="hl-keyword">fun</span> () -&gt;
+    it <span class="hl-string">"should create a node"</span> (<span class="hl-keyword">fun</span> () -&gt;
+      make_tree [<span class="hl-string">"hi"</span>]
+      |&gt; assert_value <span class="hl-string">"hi"</span>
+      |&gt; ignore
+    );
+    it <span class="hl-string">"should insert right"</span> (<span class="hl-keyword">fun</span> () -&gt;
+      make_tree [<span class="hl-string">"hi"</span>;<span class="hl-string">"there"</span>]
+      |&gt; assert_value <span class="hl-string">"hi"</span>
+      |&gt; get_right |&gt; assert_value <span class="hl-string">"there"</span>
+      |&gt; ignore
+    );
+    it <span class="hl-string">"should insert left"</span> (<span class="hl-keyword">fun</span> () -&gt;
+      make_tree [<span class="hl-string">"there"</span>;<span class="hl-string">"hi"</span>]
+      |&gt; assert_value <span class="hl-string">"there"</span>
+      |&gt; get_left |&gt; assert_value <span class="hl-string">"hi"</span>
+      |&gt; ignore
+    );
+    it <span class="hl-string">"can go deep"</span> (<span class="hl-keyword">fun</span> () -&gt;
+      make_tree [<span class="hl-string">"a"</span>;<span class="hl-string">"c"</span>;<span class="hl-string">"b"</span>]
+      |&gt; assert_value <span class="hl-string">"a"</span>
+      |&gt; get_right |&gt; assert_value <span class="hl-string">"c"</span>
+      |&gt; get_left |&gt; assert_value <span class="hl-string">"b"</span>
+      |&gt; ignore
+    );
+  );
+  describe <span class="hl-string">"Delete"</span> (<span class="hl-keyword">fun</span> () -&gt;
+    it <span class="hl-string">"removes nodes"</span> (<span class="hl-keyword">fun</span> () -&gt;
+      make_tree [<span class="hl-string">"a"</span>;<span class="hl-string">"c"</span>;<span class="hl-string">"b"</span>]
+      |&gt; remove_node <span class="hl-string">"c"</span>
+      |&gt; assert_value <span class="hl-string">"a"</span>
+      |&gt; get_right |&gt; assert_value <span class="hl-string">"b"</span>
+      |&gt; ignore
+    );
+    it <span class="hl-string">"removes root"</span> (<span class="hl-keyword">fun</span> () -&gt;
+      make_tree [<span class="hl-string">"b"</span>;<span class="hl-string">"a"</span>;<span class="hl-string">"c"</span>]
+      |&gt; remove_node <span class="hl-string">"b"</span>
+      |&gt; assert_value <span class="hl-string">"c"</span>
+      |&gt; get_left |&gt; assert_value <span class="hl-string">"a"</span>
+      |&gt; ignore
+    );
+    it <span class="hl-string">"removes all"</span> (<span class="hl-keyword">fun</span> () -&gt;
+      make_tree [<span class="hl-string">"b"</span>;<span class="hl-string">"a"</span>]
+      |&gt; remove_node <span class="hl-string">"b"</span> |&gt; remove_node <span class="hl-string">"a"</span>
+      |&gt; assert_empty
+    );
+  );
+  describe <span class="hl-string">"Find"</span> (<span class="hl-keyword">fun</span> () -&gt;
+    it <span class="hl-string">"finds nodes"</span> (<span class="hl-keyword">fun</span> () -&gt;
+      make_tree [<span class="hl-string">"a"</span>;<span class="hl-string">"c"</span>;<span class="hl-string">"b"</span>]
+      |&gt; find_node <span class="hl-string">"c"</span>
+      |&gt; assert_value <span class="hl-string">"c"</span>
+      |&gt; ignore
+    );
+    it <span class="hl-string">"is none if no match"</span> (<span class="hl-keyword">fun</span> () -&gt;
+      make_tree [<span class="hl-string">"a"</span>;<span class="hl-string">"c"</span>;<span class="hl-string">"b"</span>]
+      |&gt; find_node <span class="hl-string">"z"</span>
+      |&gt; assert_empty
+    )
+  );</code></pre>
+<h2>Conclusion</h2>
+<p>Testing with Bucklescript and Mocha is pretty easy, once you get a handle on FFI.</p>
+<p>While writing this up, I did find myself baffled by vague and unhelpful compiler errors. A good chunk of these errors was a result of me having build artifacts from an <code>avl.ml</code> file I had in my root directory. Stupid me.</p>
+<p>Anyway, hopefully the Bucklescript/OCaml folks will get all Elm on us and give us friendlier compiler errors in the future.</p>
+<p><a href="{{ site.baseurl }}{% post_url 2016-09-05-avl-tree-in-bucklescript-part-3 %}">Up next... An actual AVL tree!</a></p>
+  </article>
+  <footer class="post-nav">
+    <a href="./avl-tree-in-bucklescript-part-1.html">&larr; AVL tree in Bucklescript (part 1)</a>
+    <a href="./getting-started-with-bucklescript.html">Bucklescript getting started &rarr;</a>
+  </footer>
+</body>
+</html>

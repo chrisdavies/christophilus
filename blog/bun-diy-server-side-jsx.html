@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bun: Zero-Dependency Server-Side JSX | Christophilus</title>
+  <link rel="icon" href="../games/favicon.svg">
+  <link rel="stylesheet" href="./index.css">
+</head>
+<body>
+  <nav class="site-nav">
+    <a href="../" class="logo"><img src="../games/favicon.svg" alt="Home"></a>
+    <a href="../" class="current">Blog</a>
+    <a href="../games/">Games</a>
+    <a href="../about/">About Me</a>
+  </nav>
+  <article>
+    <header>
+      <time datetime="2024-07-12">Jul 12, 2024</time>
+    </header>
+    <h1>Bun: Zero-Dependency Server-Side JSX</h1>
+<p>I'm building a little, zero-dependency application with Bun. Bun comes with JSX support out of the box, but it took a bit of digging to get things working with no dependencies.</p>
+<p>I figured I'd explain the process.</p>
+<h2>tsconfig</h2>
+<p>First, we need to tell Bun / TypeScript where our JSX rendering logic lives. We'll put everything in <code>lib/jsx</code>:</p>
+<p>Add the following <code>compilerOptions</code> to <code>tsconfig.json</code>:</p>
+<pre><code class="lang-json"><span class="hl-keyword">"jsx":</span> <span class="hl-string">"react-jsx"</span>,
+<span class="hl-keyword">"jsxImportSource":</span> <span class="hl-string">"lib/jsx"</span>,</code></pre>
+<p>And modify your <code>paths</code> to have an entry like this:</p>
+<pre><code class="lang-json"><span class="hl-keyword">"lib/*":</span> [<span class="hl-string">"./lib/*"</span>]</code></pre>
+<p>So, with unrelated stuff omitted, your <code>tsconfig.json</code> should be a superset of this:</p>
+<pre><code class="lang-json">{
+  <span class="hl-keyword">"compilerOptions":</span> {
+    <span class="hl-keyword">"jsx":</span> <span class="hl-string">"react-jsx"</span>,
+    <span class="hl-keyword">"jsxImportSource":</span> <span class="hl-string">"lib/jsx"</span>,
+    <span class="hl-keyword">"baseUrl":</span> <span class="hl-string">"."</span>,
+    <span class="hl-keyword">"paths":</span> {
+      <span class="hl-keyword">"lib/*":</span> [<span class="hl-string">"./lib/*"</span>]
+    }
+  }
+}</code></pre>
+<h2>lib/jsx</h2>
+<p>We'll put all of our logic into <code>lib/jsx/index.ts</code>, so go ahead and create that.</p>
+<p>Bun and other transpilers expect a few other files which we'll need to create:</p>
+<ul><li><code>lib/jsx/jsx-runtime.ts</code></li><li><code>lib/jsx/jsx-dev-runtime.ts</code></li></ul>
+<p>And they both look like this:</p>
+<pre><code class="lang-js"><span class="hl-keyword">export</span> * <span class="hl-keyword">from</span> <span class="hl-string">'./index'</span>;</code></pre>
+<p>Now, let's write <code>index.ts</code>:</p>
+<p>The bulk of the logic will be in our <code>h</code> function:</p>
+<pre><code class="lang-ts"><span class="hl-keyword">export</span> <span class="hl-keyword">function</span> h(args) {
+  console.log(args);
+  <span class="hl-keyword">return</span> <span class="hl-string">'TODO...'</span>;
+}
+
+<span class="hl-keyword">export</span> <span class="hl-keyword">const</span> jsxDEV = h;
+<span class="hl-keyword">export</span> <span class="hl-keyword">const</span> jsx = h;</code></pre>
+<p>You can test that by creating <code>test.tsx</code>:</p>
+<pre><code class="lang-tsx">console.log(&lt;h1&gt;It is now {new Date().toISOString()}&lt;/h1&gt;);</code></pre>
+<p>If you run that using <code>bun test.tsx</code>, you'll see the shape of the args passed to the h function.</p>
+<h2>Escaping user input</h2>
+<p>Before we jump into the code, there's something worth noting. Bun comes with a handy <code>escapeHTML</code> function which I use in my JSX rendering logic. If you want to use any templates from the client, you'll want to use your own escape logic. It might look something like this:</p>
+<pre><code class="lang-ts"><span class="hl-keyword">const</span> chars: Record&lt;string, string&gt; = {
+  [<span class="hl-string">`"`</span>]: <span class="hl-string">'&amp;quot;'</span>,
+  [<span class="hl-string">`&amp;`</span>]: <span class="hl-string">'&amp;amp;'</span>,
+  [<span class="hl-string">`'`</span>]: '&amp;#x27;<span class="hl-string">',
+  [`&lt;`]: '</span>&amp;lt;<span class="hl-string">',
+  [`&gt;`]: '</span>&amp;gt;<span class="hl-string">',
+};
+
+const htmlEscapeRegex = /["&amp;'</span>&lt;&gt;]/g;
+
+<span class="hl-keyword">function</span> esc(s: string) {
+  <span class="hl-keyword">return</span> s.replaceAll(htmlEscapeRegex, (ch) =&gt; chars[ch]);
+}</code></pre>
+<h2>Source</h2>
+<p>Here's a look at the final implementation:</p>
+<pre><code class="lang-ts"><span class="hl-comment">// Bun / other transpilers expect these to be defined if jsx mode is</span>
+<span class="hl-comment">// react-jsx and jsxImportSource is used.</span>
+<span class="hl-keyword">export</span> <span class="hl-keyword">const</span> jsxDEV = h;
+<span class="hl-keyword">export</span> <span class="hl-keyword">const</span> jsx = h;
+
+<span class="hl-comment">// We'll use this to identify when a child is the result of a nested JSX</span>
+<span class="hl-comment">// expression. In that case, we don't want to escape the resulting HTML.</span>
+<span class="hl-keyword">const</span> $jsx = Symbol();
+
+<span class="hl-comment">// This is what we'll return from our h function. It allows us to get access</span>
+<span class="hl-comment">// to the raw HTML. The $jsx property helps us identify JSX output when</span>
+<span class="hl-comment">// dealing with nested components.</span>
+<span class="hl-keyword">export</span> type JSXResult = {
+  $jsx: Symbol;
+  value: string;
+};
+
+<span class="hl-comment">// These are self-closing tags such as &lt;img /&gt; &lt;br /&gt;, and need special</span>
+<span class="hl-comment">// treatment so that we avoid generating something invalid like &lt;img&gt;&lt;/img&gt;.</span>
+<span class="hl-keyword">const</span> voidElementNames = <span class="hl-keyword">new</span> Set([
+  'area<span class="hl-string">',
+  '</span>base<span class="hl-string">',
+  '</span>br<span class="hl-string">',
+  '</span>col<span class="hl-string">',
+  '</span>embed<span class="hl-string">',
+  '</span>hr<span class="hl-string">',
+  '</span>img<span class="hl-string">',
+  '</span>input<span class="hl-string">',
+  '</span>link<span class="hl-string">',
+  '</span>meta<span class="hl-string">',
+  '</span>source<span class="hl-string">',
+  '</span>track<span class="hl-string">',
+  '</span>wbr<span class="hl-string">',
+]);
+
+// Determine if arg is a potentially dangerous href value.
+function isPotentiallyDangerousURL(arg: string) {
+  return (
+    // If the href contains a : (58 is the unicode value for :)
+    (arg.includes('</span>:<span class="hl-string">') || arg.includes('</span>&amp;#<span class="hl-number">58</span>;<span class="hl-string">')) &amp;&amp;
+    // And it doesn'</span>t start with http:// or https://
+    !fullyQualifiedURLRegex.test(arg)
+  );
+}
+
+<span class="hl-comment">// Determine if a value is a JSXResult</span>
+<span class="hl-keyword">function</span> isJSXResult(o: any): o is JSXResult {
+  <span class="hl-keyword">return</span> o?.$jsx === $jsx;
+}
+
+<span class="hl-comment">// Convert a child / children to HTML. We may get various shapes of</span>
+<span class="hl-comment">// data as children: strings / literal values / arrays / nested</span>
+<span class="hl-comment">// JSX values, etc.</span>
+<span class="hl-keyword">function</span> stringifyChild(child: any): string {
+  <span class="hl-keyword">if</span> (Array.isArray(child)) {
+    <span class="hl-keyword">return</span> child.map(stringifyChild).join(<span class="hl-string">''</span>);
+  }
+  <span class="hl-keyword">if</span> (<span class="hl-keyword">typeof</span> child === <span class="hl-string">'string'</span>) {
+    <span class="hl-keyword">return</span> Bun.escapeHTML(child);
+  }
+  <span class="hl-keyword">if</span> (isJSXResult(child)) {
+    <span class="hl-keyword">return</span> child.value;
+  }
+  <span class="hl-keyword">if</span> (child != <span class="hl-keyword">null</span> &amp;&amp; child !== <span class="hl-keyword">false</span>) {
+    <span class="hl-keyword">return</span> Bun.escapeHTML(<span class="hl-string">`${child}`</span>);
+  }
+  <span class="hl-keyword">return</span> <span class="hl-string">''</span>;
+}
+
+<span class="hl-comment">// Convert an object to HTML attributes. We'll handle functions specially</span>
+<span class="hl-comment">// so that we can write simple event handlers on the server, and have the</span>
+<span class="hl-comment">// code execute on the client.</span>
+<span class="hl-keyword">function</span> stringifyAttrs(attrs: Record&lt;string, any&gt;) {
+  <span class="hl-keyword">let</span> result = '<span class="hl-string">';
+  for (const k in attrs) {
+    let value = attrs[k];
+
+    // We want to specifically handle boolean attributes and treat them
+    // as an add / remove operation. For example:
+    //
+    // &lt;input checked={true} /&gt;  -&gt; &lt;input checked /&gt;
+    // &lt;input checked={false} /&gt; -&gt; &lt;input /&gt;
+    if (typeof value === '</span>boolean<span class="hl-string">') {
+      value &amp;&amp; (result += ` ${k}`);
+      continue;
+    }
+
+    // Convert functions to strings, presumably as an event-handler.
+    // This would take something like this:
+    //
+    //   onClick={(e) =&gt; { document.title = e.target.textContent; }}&gt;
+    //
+    // And convert it to this:
+    //
+    //   onClick="((e) =&gt; { document.title = e.target.textContent; })(event)"
+    if (typeof value === '</span><span class="hl-keyword">function</span><span class="hl-string">' &amp;&amp; k.startsWith('</span>on<span class="hl-string">')) {
+      value = `(${value})(event)`;
+    }
+
+    // It can be handy to embed view HTML as an attribute (e.g. so that client
+    // scripts can then make use of conditional HTML). This allows us to do
+    // something like this:
+    //
+    // data-moon-icon={&lt;svg&gt;...&lt;/svg&gt;}
+    if (isJSXResult(value)) {
+      value = value.value;
+    }
+    // We want to disallow dangerous href values like javascript:alert("hi").
+    if (typeof value === '</span>string<span class="hl-string">' &amp;&amp; k === '</span>href<span class="hl-string">' &amp;&amp; isPotentiallyDangerousURL(value)) {
+      // We have a potentially dangerous href value, so we'</span>ll
+      <span class="hl-comment">// make it blank.</span>
+      value = <span class="hl-string">''</span>;
+    }
+    result += <span class="hl-string">` ${k}="${Bun.escapeHTML(value)}"`</span>;
+  }
+  <span class="hl-keyword">return</span> result;
+}
+
+<span class="hl-comment">// Fragments are how React and friends represent JSX results that contain</span>
+<span class="hl-comment">// multiple leafs without having a wrapper element.</span>
+<span class="hl-keyword">export</span> <span class="hl-keyword">function</span> Fragment(...args: Array&lt;{ children: any[] }&gt;) {
+  <span class="hl-keyword">return</span> { $jsx, value: args.flatMap((arg) =&gt; stringifyChild(arg.children)).join(<span class="hl-string">''</span>) };
+}
+
+<span class="hl-comment">// The first argument is either a tagName or a function. That is, it is either</span>
+<span class="hl-comment">// something like "div" or "h1", or it is a function which is itself a JSX</span>
+<span class="hl-comment">// component such as:</span>
+<span class="hl-comment">//</span>
+<span class="hl-comment">// const Hello(props) =&gt; &lt;h1&gt;Hello {props.name}&lt;/h1&gt;</span>
+<span class="hl-keyword">export</span> <span class="hl-keyword">function</span> h(tagOrFn: string | ((props: any) =&gt; any), props: any): JSXResult {
+  <span class="hl-comment">// We have a function component</span>
+  <span class="hl-keyword">if</span> (<span class="hl-keyword">typeof</span> tagOrFn === <span class="hl-string">'function'</span>) {
+    <span class="hl-keyword">const</span> result = tagOrFn(props);
+    <span class="hl-comment">// If a functioni component returns anything other than a JSXResult,</span>
+    <span class="hl-comment">// we don't want its output to show up in our final result.</span>
+    <span class="hl-keyword">return</span> isJSXResult(result) ? result : { $jsx, value: '<span class="hl-string">' };
+  }
+
+  // We'</span>re dealing with a tagName like <span class="hl-string">"h1"</span>, etc
+  <span class="hl-keyword">const</span> { children, dangerouslySetInnerHTML, ...attrs } = props;
+  <span class="hl-keyword">const</span> content = dangerouslySetInnerHTML
+    ? dangerouslySetInnerHTML.__html
+    : stringifyChild(children);
+
+  <span class="hl-comment">// We have a self-closing tag</span>
+  <span class="hl-keyword">if</span> (voidElementNames.has(tagOrFn)) {
+    <span class="hl-keyword">return</span> { $jsx, value: <span class="hl-string">`&lt;${tagOrFn}${stringifyAttrs(attrs)} /&gt;`</span> };
+  }
+  <span class="hl-keyword">return</span> { $jsx, value: <span class="hl-string">`&lt;${tagOrFn}${stringifyAttrs(attrs)}&gt;${content}&lt;/${tagOrFn}&gt;`</span> };
+}
+
+<span class="hl-comment">// This helper lets us change the shape of JSXResult without breaking</span>
+<span class="hl-comment">// callers.</span>
+<span class="hl-keyword">export</span> <span class="hl-keyword">function</span> renderToString(result: JSXResult) {
+  <span class="hl-keyword">return</span> result.value;
+}</code></pre>
+  </article>
+  <footer class="post-nav">
+    <a href="./my-full-time-job-is-reading-hacker-news.html">&larr; My Full-Time Job Is Reading Hacker News</a>
+    <a href="./bun-diy-live-reload.html">Bun: DIY Live Reload &rarr;</a>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prototypal vs Literal JS Objects | Christophilus</title>
+  <link rel="icon" href="../games/favicon.svg">
+  <link rel="stylesheet" href="./index.css">
+</head>
+<body>
+  <nav class="site-nav">
+    <a href="../" class="logo"><img src="../games/favicon.svg" alt="Home"></a>
+    <a href="../" class="current">Blog</a>
+    <a href="../games/">Games</a>
+    <a href="../about/">About Me</a>
+  </nav>
+  <article>
+    <header>
+      <time datetime="2016-06-14">Jun 14, 2016</time>
+    </header>
+    <h1>Prototypal vs Literal JS Objects</h1>
+<h2>TL;DR;</h2>
+<ul><li>Prototypal inheritance outperforms object literal alternatives</li><li>32x memory savings in Chrome</li><li>6x faster in Chrome</li><li>FF yields similar ratios</li></ul>
+<h2>Speed</h2>
+<p>I measured the performance of a variety of object construction alternatives, as<br>seen here:</p>
+<ul><li>http://jsperf.com/prototype-vs-object-literals/2</li></ul>
+<ul><li>Prototypal is at least 2x faster in Chrome and Safari than literal</li><li>The results were much more even in FF than in Chrome and Safari.</li></ul>
+<p>A variety of factors might affect this, including the contrived constructors<br>I created. However, these results are consistent with past comparisons I've made<br>in real-world scenarios, so I believe them to be accurate.</p>
+<p>Also of note, a third alternative which also performed really well was to<br>essentially ignore OO altogether and just pass data (as object-literal records)<br>through simple functions. More on this in the conclusion.</p>
+<p>Ultimately, though, all options perform fairly well on my souped up Mac (1M-8M<br>  operations per second). Things weren't so chummy on my underpowered Android<br>  (100K-600K operations per second).</p>
+<h2>Memory</h2>
+<p>Using this as an object literal constructor method:</p>
+<pre><code class="lang-text">function MakeObj(i) {
+  return {
+    name: 'Object' + i,
+    print: function () {
+      return this.name;
+    }
+  };
+}</code></pre>
+<p>And this as a prototypal alternative:</p>
+<pre><code class="lang-text">function MakeObj(i) {
+  this.name = 'Object' + i;
+}
+
+MakeObj.prototype = {
+  print: function () {
+    return this.name;
+  }
+};</code></pre>
+<p>I created array of 1 million objects and measured the results:</p>
+<ul><li>Chrome: 356MB for literal, 11MB for prototypal</li></ul>
+<p>  - literal syntax used roughly 32x more memory</p>
+<ul><li>FF: 114MB for literal, 8MB for prototypal</li></ul>
+<p>The verdict is grim for the object literal approach.</p>
+<h2>Conclusion</h2>
+<p>This wasn't the most rigorous scientific test, but I think the results are<br>still convincing-- and frankly disappointing.</p>
+<p>I think that JavaScript's <code>this</code> keyword and prototypal inheritance are<br>misleading features (at least to most polyglot developers). So, I was hoping to<br>see simpler alternatives win out.</p>
+<p>Modern browsers are highly optimized for certain patterns, and prototypal<br>inheritance is king here. Simulating OO using object literal syntax is simply<br>not a scenario that has been optimized. So, each time an object literal is<br>created, a copy of each of its methods is created.</p>
+<p>It is important to note that object literals, when used simply as data records,<br>perform just fine. (See the <code>None</code> test in the JS Perf examples.) It's when<br>they're used to attempt OOP that they fail to perform.</p>
+<p>Premature optimization is evil. But, when you can follow a simple rule of thumb<br>such as "prefer prototypal objects" and get free perf gains from it, the choice<br>is obvious. As for me, I might start following this rule of thumb: "screw OO,<br>let's just do FP".</p>
+  </article>
+  <footer class="post-nav">
+    <a href="./ruby-open-struct-slow-performance.html">&larr; Ruby's Open Struct's Slow Performance</a>
+    <a href="./what-is-email-good-for.html">What is Email Good For? &rarr;</a>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bun DIY: Serving Static Assets | Christophilus</title>
+  <link rel="icon" href="../games/favicon.svg">
+  <link rel="stylesheet" href="./index.css">
+</head>
+<body>
+  <nav class="site-nav">
+    <a href="../" class="logo"><img src="../games/favicon.svg" alt="Home"></a>
+    <a href="../" class="current">Blog</a>
+    <a href="../games/">Games</a>
+    <a href="../about/">About Me</a>
+  </nav>
+  <article>
+    <header>
+      <time datetime="2024-07-26">Jul 26, 2024</time>
+    </header>
+    <h1>Bun DIY: Serving Static Assets</h1>
+<p>Today, we'll be building a small, zero-dependency HTTP handler for serving static assets using Bun. Serving static assets from Bun is pretty simple, but there are some things to consider:</p>
+<ul><li>Properly handling missing files</li><li>Protecting against path-exploits (e.g. requests like <code>/assets/../.env</code> should fail)</li><li>Using ETags to avoid unnecessary bandwidth consumption</li></ul>
+<h2>Usage</h2>
+<p>Call <code>makeStaticAssetHandler</code>, and pass it the name of the folder whose contents you wish to serve. This returns an HTTP handler <code>(req: Request) =&gt; Promise&lt;Response&gt;</code> which can be used by <code>Bun.serve</code> or by a router, as in the following example:</p>
+<pre><code class="lang-js">route.add(<span class="hl-string">'get/assets/*path'</span>, makeStaticAssetHandler(<span class="hl-string">'assets'</span>));</code></pre>
+<h2>Handling missing files</h2>
+<p>When we get a request for a non-existent path, we want to return a 404. Checking if a file exists is <a href="https://bun.sh/guides/read-file/exists">trivial in bun</a>:</p>
+<pre><code class="lang-ts"><span class="hl-keyword">const</span> file = Bun.file(fullPath);
+<span class="hl-keyword">if</span> (!(<span class="hl-keyword">await</span> file.exists())) {
+  <span class="hl-keyword">return</span> <span class="hl-keyword">new</span> Response(<span class="hl-string">'File not found'</span>, { status: <span class="hl-number">404</span> });
+}</code></pre>
+<h2>Avoiding path exploits</h2>
+<p>Malicious users might try to request files that are outside of our static asset folders. For example, they might try to read our <code>.env</code> file by requesting: <code>/assets/../.env</code>. To mitigate against such requests, we'll use <a href="https://nodejs.org/api/path.html#pathnormalizepath">path.normalize</a>. This function resolves all <code>.</code> and <code>..</code> segments. Once that's done, we can check if the resulting path starts with the static asset folder prefix. If not, we'll return an HTTP 403 (Forbidden).</p>
+<h2>ETags</h2>
+<p><a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/ETag">ETags</a> allow clients to check if an asset has changed since it was last requested and only download it if so. It allows us to have the benefits of caching without resorting to old cache-busting hacks.</p>
+<p>We'll use <a href="https://bun.sh/docs/api/hashing">Bun's built-in sha256 hash</a> support to compute ETags for any assets we serve. We'll toss the result into an in-memory cache to avoid re-computing the hash. Since our project will have a relatively small number of static assets, we won't bother with cache-eviction or anything like that. If you are building an application that will have a large or unknown number of static assets, then you should look into a different caching strategy. For example, you might pre-compute the etags and store them on disk alongside the assets (e.g. <code>foo.png</code> might have a <code>foo.png.etag</code> file), or you might use a LRU cache.</p>
+<h2>Source</h2>
+<p>Here's the source:</p>
+<pre><code class="lang-ts"><span class="hl-comment">/**
+ * This file contains logic for serving static assets out
+ * of a folder. It is meant to be used in conjunction with
+ * a router, rather than as traditional middleware.
+ */</span>
+<span class="hl-keyword">import</span> path <span class="hl-keyword">from</span> <span class="hl-string">'node:path'</span>;
+
+<span class="hl-comment">/**
+ * Given a file, compoute its sha256 hash.
+ */</span>
+<span class="hl-keyword">async</span> <span class="hl-keyword">function</span> computeFileSha256(filename: string) {
+  <span class="hl-keyword">const</span> hasher = <span class="hl-keyword">new</span> Bun.CryptoHasher(<span class="hl-string">'sha256'</span>);
+  <span class="hl-keyword">const</span> file = Bun.file(filename);
+  <span class="hl-keyword">const</span> stream: any = file.stream();
+  <span class="hl-keyword">for</span> <span class="hl-keyword">await</span> (<span class="hl-keyword">const</span> chunk <span class="hl-keyword">of</span> stream) {
+    hasher.update(chunk);
+  }
+  <span class="hl-keyword">return</span> hasher.digest(<span class="hl-string">'base64'</span>);
+}
+
+<span class="hl-comment">/**
+ * A memoized function which computes the sha256 hash of a file.
+ * In dev-mode, we'll recompute the hash on each request. In
+ * production, we'll cache it.
+ */</span>
+<span class="hl-keyword">const</span> getEtag = (() =&gt; {
+  <span class="hl-keyword">if</span> (process.env.NODE_ENV === <span class="hl-string">'development'</span>) {
+    <span class="hl-keyword">return</span> computeFileSha256;
+  }
+  <span class="hl-keyword">const</span> cache: Record&lt;string, string&gt; = {};
+  <span class="hl-keyword">return</span> <span class="hl-keyword">async</span> (filename: string) =&gt; {
+    <span class="hl-keyword">let</span> hash = cache[filename];
+    <span class="hl-keyword">if</span> (!hash) {
+      hash = <span class="hl-keyword">await</span> computeFileSha256(filename);
+      cache[filename] = hash;
+    }
+    <span class="hl-keyword">return</span> hash;
+  };
+})();
+
+<span class="hl-comment">/**
+ * Create a route-handler for serving static assets from a specific
+ * folder. The route should define a "path" parameter, or the endpoint
+ * will not work.
+ *
+ * Usage:
+ *
+ *   route.add('get/assets/*path', makeStaticAssetHandler('dist/img'));
+ *   route.add('get/css/*path', makeStaticAssetHandler('dist/css'));
+ */</span>
+<span class="hl-keyword">export</span> <span class="hl-keyword">function</span> makeStaticAssetHandler(folderPath: string) {
+  <span class="hl-keyword">return</span> <span class="hl-keyword">async</span> (req: Request &amp; { params: Record&lt;string, string&gt; }) =&gt; {
+    <span class="hl-comment">// Compute the full path, normalizing out any .. and . segments</span>
+    <span class="hl-keyword">const</span> fullPath = path.normalize(path.join(folderPath, req.params.path));
+    <span class="hl-comment">// We've got an invalid request, possibly someone malicious hunting for files</span>
+    <span class="hl-keyword">if</span> (!fullPath.startsWith(folderPath)) {
+      <span class="hl-keyword">return</span> <span class="hl-keyword">new</span> Response('Invalid asset path<span class="hl-string">', { status: 403 });
+    }
+    // Handle the 404 edge-case
+    const file = Bun.file(fullPath);
+    if (!(await file.exists())) {
+      return new Response('</span>File not found<span class="hl-string">', { status: 404 });
+    }
+    // Compute the etag and send a 304 if the client already has the latest
+    const etag = await getEtag(fullPath);
+    if (etag === req.headers.get('</span>If-None-Match')) {
+      <span class="hl-keyword">return</span> <span class="hl-keyword">new</span> Response(<span class="hl-keyword">null</span>, { status: <span class="hl-number">304</span> });
+    }
+    <span class="hl-keyword">return</span> <span class="hl-keyword">new</span> Response(file, { headers: { ETag: etag } });
+  };
+}</code></pre>
+  </article>
+  <footer class="post-nav">
+    <a href="./bun-diy-sessions.html">&larr; Bun DIY: Sessions</a>
+    <a href="./my-full-time-job-is-reading-hacker-news.html">My Full-Time Job Is Reading Hacker News &rarr;</a>
+  </footer>
+</body>
+</html>

@@ -228,6 +228,10 @@ hr {
     flex-direction: column;
     gap: 0.25rem;
   }
+
+  .post-list li.desktop-only {
+    display: none;
+  }
 }
 
 /* Post navigation */

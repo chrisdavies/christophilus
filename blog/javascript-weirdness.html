@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JavaScript Weirdness | Christophilus</title>
+  <link rel="icon" href="../games/favicon.svg">
+  <link rel="stylesheet" href="./index.css">
+</head>
+<body>
+  <nav class="site-nav">
+    <a href="../" class="logo"><img src="../games/favicon.svg" alt="Home"></a>
+    <a href="../" class="current">Blog</a>
+    <a href="../games/">Games</a>
+    <a href="../about/">About Me</a>
+  </nav>
+  <article>
+    <header>
+      <time datetime="2015-07-08">Jul 8, 2015</time>
+    </header>
+    <h1>JavaScript Weirdness</h1>
+<p>In the following code, foo will have the value of ‘bar’…</p>
+<pre><code class="lang-js"><span class="hl-keyword">var</span> foo = (<span class="hl-number">2323</span>, <span class="hl-string">'baz'</span>, <span class="hl-string">'bar'</span>);</code></pre>
+<p>JavaScript is so weird. I saw this code today in a student’s work, and thought it would produce a syntax error. Nope. Just a weird, unexpected side effect, instead.</p>
+  </article>
+  <footer class="post-nav">
+    <a href="./simplifying-life-by-adding-useless-tech.html">&larr; Simplify Your Life With Useless Tech</a>
+    <span></span>
+  </footer>
+</body>
+</html>
