@@ -1,0 +1,1536 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Christophilus</title>
+    <link>https://christophilus.com</link>
+    <description>Blog by Chris Davies</description>
+    <language>en-us</language>
+    <atom:link href="https://christophilus.com/feed.xml" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>Preventing the Collapse of Civilization</title>
+      <link>https://christophilus.com/blog/preventing-the-collapse-of-civilization.html</link>
+      <guid>https://christophilus.com/blog/preventing-the-collapse-of-civilization.html</guid>
+      <pubDate>Wed, 21 Jan 2026 12:00:00 GMT</pubDate>
+      <description>&lt;h1&gt;Preventing the Collapse of Civilization&lt;/h1&gt;
+&lt;p&gt;In 2019, Jon Blow gave a talk called Preventing the Collapse of Civilization. He presents a historical walkthrough of technology which has been lost over the millenia, and ends with a warning that this could happen to us.&lt;/p&gt;
+&lt;p&gt;In the light of agentic coding agents, this talk seems even more prescient.&lt;/p&gt;
+&lt;p&gt;&lt;div class=&quot;video-embed&quot;&gt;&lt;iframe src=&quot;https://www.youtube.com/embed/ZSRHeXYDLko&quot; title=&quot;Preventing the Collapse of Civilization&quot; frameborder=&quot;0&quot; allow=&quot;accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture&quot; allowfullscreen&gt;&lt;/iframe&gt;&lt;/div&gt;&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>Claude Code Example</title>
+      <link>https://christophilus.com/blog/example-claude-code-prompt.html</link>
+      <guid>https://christophilus.com/blog/example-claude-code-prompt.html</guid>
+      <pubDate>Fri, 09 Jan 2026 12:00:00 GMT</pubDate>
+      <description>&lt;h1&gt;Claude Code Example&lt;/h1&gt;
+&lt;p&gt;I've used Claude Code off an on for around a year, using it heavily in the last few months. I thought it might be helpful for others (and maybe my future self) if I jotted down an example scenario and a specific prompt I used.&lt;/p&gt;
+&lt;h2&gt;Overly general guidance&lt;/h2&gt;
+&lt;p&gt;I recently asked it to build a feature for me-- a calendar view that organization admins could use to see all scheduled activity across their entire organization. An organization might have multiple instructors, each of which is creating and leading multiple courses, any of which might have scheduled meetings and modules. Each course has its own calendar view, but until recently, there was no way for admins to get a high-level calendar view for the entire organization.&lt;/p&gt;
+&lt;p&gt;So, I tasked Claude Code with this, and it built it in a few minutes. It didn't take long before I realized the solution was pretty terrible.&lt;/p&gt;
+&lt;p&gt;Claude had:&lt;/p&gt;
+&lt;ul&gt;&lt;li&gt;Attempted to use kysely (a database library we don't use)&lt;/li&gt;&lt;li&gt;Decided to pull all courses, instructors, and scheduled items into memory and do the filtering there rather than in Postgres&lt;/li&gt;&lt;li&gt;Sent the entire payload to the browser to do live-processing there&lt;/li&gt;&lt;li&gt;Made numerous glaring mistakes in the Preact layer&lt;/li&gt;&lt;/ul&gt;
+&lt;p&gt;Some other things I've frequently seen Claude do:&lt;/p&gt;
+&lt;ul&gt;&lt;li&gt;N+1 queries where a single well-structured query (e.g. a merge or window function) would serve.&lt;/li&gt;&lt;li&gt;Improper data access validation (for example, not ensuring that ids sent from the client actually belong to / are accessible by the caller).&lt;/li&gt;&lt;/ul&gt;
+&lt;h2&gt;Specific guidance&lt;/h2&gt;
+&lt;p&gt;So, here's how I guided it to properly implement the front-end for the calendar feature:&lt;/p&gt;
+&lt;h3&gt;Browser&lt;/h3&gt;
+&lt;p&gt;The calendar will be driven by a state object:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-text&quot;&gt;// Pseudo
+type State = {
+  // The 1st of the month being viewed
+  start: Date;
+  instructors:
+    | { type: 'all' }
+    | { type: 'some', ids: UUID[] }
+  courses:
+    | { type: 'all' }
+    | { type: 'some', ids: UUID[] }
+  items: Array&amp;lt;'modules' | 'meetings'&amp;gt;;
+};
+
+const defaultState = {
+  start: now().onDay(1),
+  guides: { type: 'all' },
+  courses: { type: 'all' }
+  items: ['modules', 'meetings'],
+};
+
+function Page(props) {
+  const [state, setState] = useState&amp;lt;State&amp;gt;(() =&amp;gt; {
+    try {
+      return JSON.parse(props.params.filter);
+    } catch {
+      return defaultState;
+    }
+  });
+
+  // etc...
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Note: We'll have a max size for the ids arrays-- maybe 10 or 20 or something.&lt;/p&gt;
+&lt;p&gt;When the state changes, we'll update the URL without triggering a re-render simply so that if the user refreshes, they'll see the same view, and they can also copy / paste the URL with other admins to share the view they're seeing.&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-text&quot;&gt;// Pseudo
+useDidUpdateEffect(() =&amp;gt; {
+  const queryStr = JSON.stringify(state);
+  router.rewrite(`${location.pathname}?filter=${encodeURIComponent(queryStr)}`);
+}, [state]);&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The data we display (the side-nav courses, and the items in the calendar, etc) will be loaded from the server any time that filter changes. We can use a debounce if we like. All of this (including race-condition handling) is built into our existing &lt;code&gt;useAsyncData&lt;/code&gt; hook:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-text&quot;&gt;const data = useAsyncData(() =&amp;gt; rpx.adminCalendar.load({ ...state, timezone }), [state]);&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Note: We may want to use Zod or something like it to parse the state rather than just parsing it as JSON, so that we &lt;em&gt;force&lt;/em&gt; it to conform to the expected shape that we can pass directly to the rpx endpoint.&lt;/p&gt;
+&lt;p&gt;Remember to use a functional, immutable approach. Use simple state objects to avoid awkward equality checks and mutations:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-text&quot;&gt;// NO
+const [selectedIds, setSelectedIds] = useState(new Set());
+const toggleId = (id) =&amp;gt; setSelectedIds((ids) =&amp;gt; {
+  if (ids.has(id)) {
+    ids.delete(id);
+  } else {
+    ids.add(id);
+  }
+  return ids;
+});
+
+// YES
+const [selectedIds, setSelectedIds] = useState([]);
+const toggleId = (id) =&amp;gt; setSelectedIds((ids) =&amp;gt; {
+  return ids.includes(id) ? ids.filter((x) =&amp;gt; x !== id) : [...ids, id];
+});&lt;/code&gt;&lt;/pre&gt;
+&lt;h3&gt;Server&lt;/h3&gt;
+&lt;p&gt;The endpoint can probably query the information we need by using a single query. For any given date, we want to display the first 2 items, with meetings being prioritized over modules. We'll display &lt;code&gt;+ N more...&lt;/code&gt; and allow the user to click that to view all items for a specific date.&lt;/p&gt;
+&lt;p&gt;So, our RPC function will end up returning something like this:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-text&quot;&gt;type Item = {
+  id: UUID;
+  timestamp: Date;
+  title: string;
+  type: 'module' | 'meeting';
+};
+
+type DateResult = {
+  date: Date;
+  numItems: number;
+  items: Item;
+};
+
+type ReturnType = {
+  dates: DateResult[];
+};&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;We can flesh it out more as we go.&lt;/p&gt;
+&lt;ul&gt;&lt;li&gt;We should probably use a window function or something like that to efficiently collect the items per date.&lt;/li&gt;&lt;li&gt;We need to ensure we use the passed timezone so we group the items into the proper date (e.g. an item might be Tuesday in UTC, but Wednesday in the caller's timezone)&lt;/li&gt;&lt;li&gt;Ensure the results all belong to the current organization, and that the caller is at least an active, valid admin in that organization&lt;/li&gt;&lt;/ul&gt;</description>
+    </item>
+    <item>
+      <title>Where do we go from here?</title>
+      <link>https://christophilus.com/blog/where-do-we-go-from-here.html</link>
+      <guid>https://christophilus.com/blog/where-do-we-go-from-here.html</guid>
+      <pubDate>Tue, 06 Jan 2026 12:00:00 GMT</pubDate>
+      <description>&lt;h1&gt;Where do we go from here?&lt;/h1&gt;
+&lt;p&gt;AI has changed the software engineering profession. Is this change permanent? If so, what does the profession look like moving forward? Are incoming grads screwed? Does experience matter at all? What should I do about my career if I'm not ready for early retirement, but am too old to make a significant career pivot?&lt;/p&gt;
+&lt;p&gt;I'll explore all of this and more below.&lt;/p&gt;
+&lt;h2&gt;Is this permanent?&lt;/h2&gt;
+&lt;p&gt;I think so, yeah. How could this all grind to a halt and reverse? The AI companies could go belly-up, but in that case, their existing models would be bought on the cheap by a big corp like Microsoft. The models won't disappear due to bankruptcy.&lt;/p&gt;
+&lt;p&gt;What about poisoning? Some disgruntled devs are attempting to disseminate LLM poison across the web. I think this is both wrong and futile. If the malcontents succeed in poisoning all future training attempts, the current models will become the permanent plateau. They're good enough as is, so poisoning won't give us a reversion to the good old days.&lt;/p&gt;
+&lt;h2&gt;What does software engineering become?&lt;/h2&gt;
+&lt;p&gt;The majority of work in this industry will be a combination of product management, micro-management of agent teams, and code reviewing.&lt;/p&gt;
+&lt;h3&gt;A note about AI skepticism&lt;/h3&gt;
+&lt;p&gt;Here, I'll take a moment to address AI skeptics. The skeptics claim that AI is only good for generating boilerplate code. It can't do anything novel or interesting. The only jobs it will automate are code-monkey jobs, and the interesting jobs will remain.&lt;/p&gt;
+&lt;p&gt;But, I think this is wrong. With guidance, agents can definitely generate code which has never existed before. If you think of a completely new concept, you will still build it on existing languages using variables, conditionals, and loops, or some higher level functional abstraction over those. Well, if you can write it, you can guide an agent to write it.&lt;/p&gt;
+&lt;p&gt;I've gotten Claude Code to write most of a password manager in Hare-- an obscure language that is almost certainly a tiny fraction of Claude's training data. It can do more than build trivial CRUD applications.&lt;/p&gt;
+&lt;h2&gt;Are incoming grads screwed?&lt;/h2&gt;
+&lt;p&gt;I don't know. Maybe. My advice to young people is to try to find work that they'll enjoy, that will contribute positively to society, and that will not be easy to automate away. Blue collar work clearly fits the bill: plumbers, builders, electricians, etc. Careers that will always require human discretion, or where human-to-human interaction is part of the point-- doctors, nurses, psychologists, etc.&lt;/p&gt;
+&lt;p&gt;If you're entrepreneurial, think about how you can provide value to people in your community. Be a value creator, and ideally, find a way to create value in the physical world.&lt;/p&gt;
+&lt;h2&gt;Does experience matter at all?&lt;/h2&gt;
+&lt;p&gt;Yeah. It does. The best way to guide an agent is to break a system down into clean modules with clear boundaries, so the agent can focus on specific subsystems without blowing up context or getting lost in the weeds. Without proper organization, a project will slowly become unmaintainable. This is true whether regardless of whether it's built by humans or by AI agents.&lt;/p&gt;
+&lt;h2&gt;What should I do about my career?&lt;/h2&gt;
+&lt;p&gt;Personally, I've avoided climbing the management ladder. I've been a team lead a few times, but that mostly involved hiring the right people and letting them do what they do best. I don't know that I want to spend the rest of my career coddling and babysitting LLMs. I don't see myself lasting very long if my job consists primarily in reviewing AI slop.&lt;/p&gt;
+&lt;p&gt;So, what's an engineer to do? To this, I don't yet have an answer. This year, I will discover whether or not I enjoy shifting primarily to product management.&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>Claude and Bun</title>
+      <link>https://christophilus.com/blog/claude-code-and-bun.html</link>
+      <guid>https://christophilus.com/blog/claude-code-and-bun.html</guid>
+      <pubDate>Mon, 08 Dec 2025 12:00:00 GMT</pubDate>
+      <description>&lt;h1&gt;Claude and Bun&lt;/h1&gt;
+&lt;p&gt;I thought of &lt;a href=&quot;https://github.com/chrisdavies/bunfx&quot;&gt;this&lt;/a&gt; project after the Nth npm-related vulnerability. How realistic is it to build a low-dependency application, using Claude to generate code that you would normally pull in from npm?&lt;/p&gt;
+&lt;p&gt;I also wanted to do a deeper assessment of building something realistic in Bun.&lt;/p&gt;
+&lt;h2&gt;Replacing npm with Claude Code&lt;/h2&gt;
+&lt;p&gt;Most of the code in the project was written by Claude Code (Opus 4.5). I didn't review any of the tests or markdown files. I &lt;em&gt;did&lt;/em&gt; however review the generated source code. For important files, my reviews were thorough(ish). For unimportant files (e.g. CSS), I just did a quick scan.&lt;/p&gt;
+&lt;p&gt;The results not excellent, but acceptable. Most of the time, its first solution was almost good enough. It went wrong in various ways. It tended to be overly verbose or inefficient in ways humans probably would have avoided. It sometimes solved problems by littering a module with effectful global mutatable state. It often generated code which was quite different in style from other code in the project (this may be due to me not properly shaping my claude.md or whatever).&lt;/p&gt;
+&lt;p&gt;That said, TypeScript and Biome helped guide things to a mostly consistent place faster than if I'd written all of this myself. The total effort I exerted to build this project was lower than if I'd built it myself.&lt;/p&gt;
+&lt;h2&gt;Is it more secure than npm?&lt;/h2&gt;
+&lt;p&gt;Maybe, maybe not. I have no doubt an astute security researcher could find vulnerabilities in this codebase. There are certainly fewer eyes on this than on a popular npm package. On the other hand, the code that is committed here gets reviewed rather than blindly pulled and updated (as is the case with every npm-based project I've ever been a part of). And I don't need to worry about the never ending upgrade cycle and resulting instability.&lt;/p&gt;
+&lt;h2&gt;Benefits of DIY w/ Claude&lt;/h2&gt;
+&lt;p&gt;With Claude, you can build a set of tools that fit you and your application. With npm, you end up cobbling together a bunch of disparate libraries, each with a distinct style and flavor, some of which are unpleasant.&lt;/p&gt;
+&lt;p&gt;With Claude, you build what you need. With npm, you are likely to pull in an overly general library that gives you the function you want along with 10 you don't.&lt;/p&gt;
+&lt;h2&gt;Is it faster than npm?&lt;/h2&gt;
+&lt;p&gt;No. Maybe? This project took quite a bit longer to to build than if I had simply run &lt;code&gt;npm install a bunch of crap&lt;/code&gt; and then tossed the app together. About half of my time on the project was iterating on architecture / API design, and half was code-review and providing feedback to Claude.&lt;/p&gt;
+&lt;p&gt;However, now that the foundation is built, maybe it will be faster moving forward. I may build another demo project on top of this, and see how that goes.&lt;/p&gt;
+&lt;h2&gt;What about Bun?&lt;/h2&gt;
+&lt;p&gt;Let's move on to Bun.&lt;/p&gt;
+&lt;p&gt;So far, building on top of Bun has been excellent with on caveat.&lt;/p&gt;
+&lt;p&gt;Bun's SQL layer is incomplete:&lt;/p&gt;
+&lt;ul&gt;&lt;li&gt;No logging support&lt;/li&gt;&lt;li&gt;No transform support (e.g. no equivalent to Postgres.js &lt;code&gt;transform: toCamel&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;No support for streaming large resultsets&lt;/li&gt;&lt;/ul&gt;
+&lt;p&gt;The first two aren't showstoppers. They're annoying, and require a bit more care when querying data. But the lack of streaming does make certain classes of applications impossible to build effectively (anything which needs to read massive amounts of data from a database for any purpose).&lt;/p&gt;
+&lt;h2&gt;Conclusion&lt;/h2&gt;
+&lt;p&gt;I quite enjoyed this. Claude Code with Opus 4.5 and Bun is a very nice combo. So nice, in fact, that Anthropic acquired Bun. If you've still not built anything with these two tools, I highly recommend giving it a try.&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>Podman dev environment</title>
+      <link>https://christophilus.com/blog/podman-dev.html</link>
+      <guid>https://christophilus.com/blog/podman-dev.html</guid>
+      <pubDate>Fri, 06 Jun 2025 12:00:00 GMT</pubDate>
+      <description>&lt;h1&gt;Podman dev environment&lt;/h1&gt;
+&lt;p&gt;A couple years ago, after yet another egregious malicious npm package, I changed my dev environment.&lt;/p&gt;
+&lt;p&gt;A friend asked me to do a quick write-up, so here you go. You're welcome, Matt.&lt;/p&gt;
+&lt;p&gt;I run a lot of little local projects, each of which has their own dependencies. I don't trust the supply chain for all of my Neovim plugins, Ruby gems, Go deps, npm packages, etc. So, I decided to create a little tool based on Podman which allows me to quickly spin up a dev container in any given folder. And sandbox all of my dependencies-- including my dev tools-- inside it.&lt;/p&gt;
+&lt;h2&gt;The workflow&lt;/h2&gt;
+&lt;p&gt;I &lt;code&gt;cd ./some/folder&lt;/code&gt;, then type &lt;code&gt;dev sh&lt;/code&gt;, and I'm in a container with &lt;code&gt;./some/folder&lt;/code&gt; mounted at &lt;code&gt;/src&lt;/code&gt;. That's it.&lt;/p&gt;
+&lt;p&gt;I generally spawn a few terminals and run &lt;code&gt;dev sh&lt;/code&gt; in each: one for &lt;code&gt;npm start&lt;/code&gt; or whatever, one for &lt;code&gt;claude&lt;/code&gt; or my terminal-based AI agent, and one for &lt;code&gt;nvim&lt;/code&gt;. Could I use tmux or Nvim to multiplex? Yes. Do I want to? No. I like letting my window manager handle this, and it's not a big enough hassle that I've ever considered automating it in any way.&lt;/p&gt;
+&lt;h2&gt;Securityish&lt;/h2&gt;
+&lt;p&gt;The containers don't have access to anything on the host machine other than the specific folder from which I ran my &lt;code&gt;dev sh&lt;/code&gt; command and any ports which my &lt;code&gt;.podman/env&lt;/code&gt; file directs it to expose.&lt;/p&gt;
+&lt;p&gt;Since it's podman, it is rootless. This means, if anything running in the container gets out onto my host machine, at least it won't be running with root privileges.&lt;/p&gt;
+&lt;h2&gt;No orchestration&lt;/h2&gt;
+&lt;p&gt;I install &lt;em&gt;all&lt;/em&gt; of my dependencies in the container. This includes my editor (Neovim and various plugins), database (generally Postgres using pgenv), Claude Code, etc.&lt;/p&gt;
+&lt;p&gt;Basically, I treat my podman containers as if they're a traditional virtual machine. I put everything in there. I don't bother with docker compose or whatever. That's for CI and production pipelines. On my dev box, every project is a single container, and it's super simple.&lt;/p&gt;
+&lt;p&gt;Terminal-based tools work really well here. Neovim and Claude Code run in the containers, so I don't have to fiddle with trying to get my IDE or whatever to understand that I'm using docker.&lt;/p&gt;
+&lt;p&gt;I don't need to worry (as much) about Claude Code or a rogue Neovim plugin grabbing stuff they shouldn't. They can only grab what's in my container which is never super sensitive info.&lt;/p&gt;
+&lt;h2&gt;Arch&lt;/h2&gt;
+&lt;p&gt;I've used Debian, Fedora, and Arch-based images, but I've settled on Arch. This is mainly because I like to have the latest packages. If I need a specific version of a thing, I'll install that thing using a tool like &lt;code&gt;pgenv&lt;/code&gt; for Postgres, or &lt;code&gt;nvm&lt;/code&gt; for Node. For everything else, I just use Arch's package manager.&lt;/p&gt;
+&lt;h2&gt;Niri&lt;/h2&gt;
+&lt;p&gt;On my host machine, I run Fedora or Arch with Niri as the window manager. Niri is awesome. Spawning, switching between, and closing windows is natural, and my hands barely have to move to make it happen.&lt;/p&gt;
+&lt;p&gt;I never liked tiling WMs, because I can't do anything useful in a tiny square. Niri gives each window full height and a decent width by default, and simply places all of your windows in an infinite horizontal line. I quickly move between windows using the Super key + vim motions (e.g. &lt;code&gt;Super+l&lt;/code&gt; focuses the window to the right &lt;code&gt;Super+h&lt;/code&gt; focuses the window to the left). Resizing windows, moving them, stacking or unstacking them centering / uncentering them, etc are all very quick operations with efficient keybindings to keep me in my flow state.&lt;/p&gt;
+&lt;p&gt;Speaking of flow-state, I spawn a lot of ad-hoc terminal instances. I use the Foot terminal because it launches instantly and is very light-weight by modern terminal standards, so I can go from &quot;I wonder what the output of &lt;code&gt;foo bar&lt;/code&gt; is?&quot; to spawning + running that command instantly without interrupting my flow-state.&lt;/p&gt;
+&lt;p&gt;Basically, Niri + Foot + Podman = &amp;lt;3.&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>Firebird</title>
+      <link>https://christophilus.com/blog/firebird.html</link>
+      <guid>https://christophilus.com/blog/firebird.html</guid>
+      <pubDate>Thu, 05 Dec 2024 12:00:00 GMT</pubDate>
+      <description>&lt;h1&gt;Firebird&lt;/h1&gt;
+&lt;p&gt;While poking around with a play project, I was thinking, &quot;Wouldn't it be nice if SQLite had a server mode?&quot;. It'd be nice to have a database that could give us the best of both worlds-- the simplicity of SQLite and the multi-client scalability of Postgres. You could build small projects with it, and if any of them ever needed to scale, no problemo.&lt;/p&gt;
+&lt;p&gt;Well, &lt;a href=&quot;https://www.firebirdsql.org&quot;&gt;Firebird&lt;/a&gt; might be that database. It's an old database from the days of Pascal. It can be embedded, can run in embedded environments, and can run as a standalone server on a high-core, high-RAM beast of a machine.&lt;/p&gt;
+&lt;p&gt;Let's take a look.&lt;/p&gt;
+&lt;h2&gt;Installation&lt;/h2&gt;
+&lt;p&gt;Installation is pretty straightfoward. You download, unzip, and run an install script:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-bash&quot;&gt;curl -O &lt;span class=&quot;hl-string&quot;&gt;&quot;https://github.com/FirebirdSQL/firebird/releases/download/v5.0.1/Firebird-5.0.1.1469-0-linux-x64.tar.gz&quot;&lt;/span&gt;
+
+tar -xvzf &lt;span class=&quot;hl-string&quot;&gt;&quot;Firebird-5.0.1.1469-0-linux-x64.tar.gz&quot;&lt;/span&gt;
+
+./Firebird-5.0.1.1469-0-linux-x64/install.sh&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The instlal script prompts you to create a password for the sysdba user.&lt;/p&gt;
+&lt;p&gt;Everything is now installed in &lt;code&gt;/opt/firebird&lt;/code&gt;. The server can be configured by editing &lt;code&gt;/opt/firebird/firebird.conf&lt;/code&gt;. All binaries are in &lt;code&gt;/opt/firebird/bin&lt;/code&gt; which you should add to your path.&lt;/p&gt;
+&lt;p&gt;To start Firebird in server mode, all you have to do is run:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-bash&quot;&gt;firebird&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Firebird comes with an example database: &lt;code&gt;/opt/firebird/examples/empbuild/employee.fdb&lt;/code&gt;. Let's connect to that using the Firebird interactive tool &lt;code&gt;isql&lt;/code&gt;.&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-bash&quot;&gt;&lt;span class=&quot;hl-comment&quot;&gt;# Replace &quot;secret&quot; with whatever password you set up previously&lt;/span&gt;
+isql -user sysdba -password secret /opt/firebird/examples/empbuild/employee.fdb&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Here, we can list the tables by running an isql-specific command &lt;code&gt;show tables;&lt;/code&gt; or with a bit of standard SQL:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-sql&quot;&gt;&lt;span class=&quot;hl-keyword&quot;&gt;SELECT&lt;/span&gt; RDB$RELATION_NAME
+&lt;span class=&quot;hl-keyword&quot;&gt;FROM&lt;/span&gt; RDB$RELATIONS
+&lt;span class=&quot;hl-keyword&quot;&gt;WHERE&lt;/span&gt; RDB$SYSTEM_FLAG = &lt;span class=&quot;hl-number&quot;&gt;0&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;AND&lt;/span&gt; RDB$RELATION_TYPE = &lt;span class=&quot;hl-number&quot;&gt;0&lt;/span&gt;;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;We see the following:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-text&quot;&gt;RDB$RELATION_NAME
+=============================================================== 
+COUNTRY
+JOB
+DEPARTMENT
+EMPLOYEE
+PROJECT
+EMPLOYEE_PROJECT
+PROJ_DEPT_BUDGET
+SALARY_HISTORY
+CUSTOMER
+SALES&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Let's have a look at the first employee record:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-sql&quot;&gt;&lt;span class=&quot;hl-keyword&quot;&gt;SELECT&lt;/span&gt; FIRST &lt;span class=&quot;hl-number&quot;&gt;1&lt;/span&gt; * &lt;span class=&quot;hl-keyword&quot;&gt;FROM&lt;/span&gt; employee;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;If your terminal isn't wide, it might be hard to read the output due to text wrapping. You can run &lt;code&gt;SET LIST ON;&lt;/code&gt; to change how the rows are printed.&lt;/p&gt;
+&lt;h2&gt;Transactions&lt;/h2&gt;
+&lt;p&gt;An interesting thing to note is that everything in Firebird happens in a transaction, and by default, the isolation level is snapshot. This caught me off-guard, as I've never used snapshot isolation in any other database.&lt;/p&gt;
+&lt;p&gt;To illustrate this, fire up two separate isql instances.&lt;/p&gt;
+&lt;p&gt;In one instance, modify the database:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-sql&quot;&gt;&lt;span class=&quot;hl-keyword&quot;&gt;UPDATE&lt;/span&gt; employee &lt;span class=&quot;hl-keyword&quot;&gt;SET&lt;/span&gt; first_name=&lt;span class=&quot;hl-string&quot;&gt;'Bobby'&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;WHERE&lt;/span&gt; emp_no=&lt;span class=&quot;hl-number&quot;&gt;2&lt;/span&gt;;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Then, in both isql instances, retrieve that record:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-sql&quot;&gt;&lt;span class=&quot;hl-keyword&quot;&gt;SELECT&lt;/span&gt; first_name &lt;span class=&quot;hl-keyword&quot;&gt;FROM&lt;/span&gt; employee &lt;span class=&quot;hl-keyword&quot;&gt;WHERE&lt;/span&gt; emp_no=&lt;span class=&quot;hl-number&quot;&gt;2&lt;/span&gt;;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;One will show &lt;code&gt;Bobby&lt;/code&gt; and one with show &lt;code&gt;Robert&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;That's because we haven't committed our transaction. In the isql where you ran the update, go ahead and run &lt;code&gt;COMMIT;&lt;/code&gt;, then re-run the select queries.&lt;/p&gt;
+&lt;p&gt;There's no change! &lt;code&gt;Bobby&lt;/code&gt; and &lt;code&gt;Robert&lt;/code&gt; still show up.&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;That's&lt;/em&gt; because the &quot;Robert&quot; isql instance is viewing a snapshot of the database as it was when the database connection was established. To view the latest data, you have to &lt;code&gt;COMMIT;&lt;/code&gt; there, too, and now you're looking at the latest version of the database.&lt;/p&gt;
+&lt;p&gt;As I said, this surprised me, since it's not the default behavior of any database I've ever used. The transaction levels can be controlled explicitly. See &lt;a href=&quot;https://www.firebirdsql.org/file/documentation/chunk/en/refdocs/fblangref40/fblangref40-transacs.html&quot;&gt;the docs&lt;/a&gt; and &lt;a href=&quot;https://ib-aid.com/en/transactions-in-firebird-acid-isolation-levels-deadlocks-and-update-conflicts-resolution/&quot;&gt;this blog post&lt;/a&gt; for details of how Firebird transactions work.&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>Are price controls defensible?</title>
+      <link>https://christophilus.com/blog/are-price-controls-defensible.html</link>
+      <guid>https://christophilus.com/blog/are-price-controls-defensible.html</guid>
+      <pubDate>Thu, 19 Sep 2024 12:00:00 GMT</pubDate>
+      <description>&lt;h1&gt;Are price controls defensible?&lt;/h1&gt;
+&lt;p&gt;Are price controls defensible? John Kenneth Galbraith is the most competent, intelligent defender of price controls that I've come across. He was in charge of WWII price fixing— a scheme which most consider to have been a success. War is almost always inflationary. WWI certainly was. WWII much less so. In his book &quot;Money: Whence It Came, Where It Went&quot; Galbraith makes the heretical argument that peacetime governments should use price controls as a means of fighting inflation.&lt;/p&gt;
+&lt;p&gt;Such a proposal faces numerous challenges which Galbraith himself admits. Incompetent people tend to rise to power in government in general, and in the administration of monetary and fiscal policy in particular. Price controls work only when dealing with centralized corporations who have pricing power. They will not work when imposed on a broadly decentralized and highly competitive area of the market (such as groceries). There are two reasons such areas should be left alone. Competition naturally keeps margins low. Markets with many players— none of whom have pricing power— cannot be easily monitored and controlled. On the other hand, sectors with high pricing power— monopolistic, oligopolistic, and unionized areas of the economy— provide a large, convenient, manipulable target. There are fewer moving parts. There is a better paper trail. There is higher risk aversion. And because of pricing power, normal competitive market forces are either missing, ineffective, or greatly handicapped.&lt;/p&gt;
+&lt;p&gt;Such is my reduction of his argument.&lt;/p&gt;
+&lt;p&gt;Galbraith wrote during the mid seventies. His America still had strong unions. He wrote from the midst of spiraling inflation which worked something like this: a monopoly (let's say US Steel) raised its prices. The steel union wanted its cut, so it negotiated higher wages. Higher wages ate into profits, so the monopoly raised its prices again. The union wanted its cut, etc. Market forces did not soon arrest such a spiral. Inflation continued until the economy was wrecked and price increases could no longer be withstood.&lt;/p&gt;
+&lt;p&gt;In the 1970s, Galbraith noted, price controls already existed. They simply weren't government-imposed. Instead, the board of US Steel, or OPEC, or similarly monopolistic enterprises imposed their own— always bloated, often artificial— prices. Why not turn such power over to a government that could take macro economic health into consideration?&lt;/p&gt;
+&lt;p&gt;Modern economics is caught in an endless cycle of boom and bust. Inflation is fought only with a clumsy combination monetary and fiscal policy. Each cycle always ends in a painful period of high unemployment, civil unrest, and protracted recession or depression. In Galbraith's opinion, government-imposed price and wage controls could smooth the curves of such cycles thereby avoiding much of the massive economic pain associated with the deflationary side.&lt;/p&gt;
+&lt;p&gt;Such a system might bring other benefits. In WWII if a company was allowed to charge $20 per unit, it quickly found a way to produce that unit for less than $20. It also discovered how to produce and sold more units as a means to increase its net profit, if not its margins. A consequence was that production and productivity expanded massively.&lt;/p&gt;
+&lt;h2&gt;My uninformed opinion&lt;/h2&gt;
+&lt;p&gt;I am in no position to critique Galbraith. I'm an economically ignorant programmer who just so happens to have enjoyed reading his books. Thus what follows is a continuation of my lifelong habit of speaking overconfidently from a place of ignorance.&lt;/p&gt;
+&lt;p&gt;When it comes to peacetime price controls, I'm not as optimistic as Galbraith. Wartime controls had the necessary prerequisites of broad popular support and competent administrators. It is hard to imagine either of those prerequisites being found today.&lt;/p&gt;
+&lt;p&gt;To combat incompetence, Galbraith says that we must fire any administrators under whom economic policies fail. But such political will is unlikely to be found with any regularity. As always, we will end up with long tenured bureaucrats competent only at masking their incompetence with an obfuscating haze of sophisticated language.&lt;/p&gt;
+&lt;p&gt;Another problem with price controls is capital flight. In WWII, the best place to deploy your capital was the United States. Where else could you go? Europe with Hitler poised to seize your assets? Asia with the Japanese rampaging? The Soviet Union? Africa? Everywhere there was war, instability, and uncertainty. The only place to deploy capital with reasonable safety was United States. So, in WWII the US could impose a lot of economic restrictions on its corporations, and they just had to suck it up.&lt;/p&gt;
+&lt;p&gt;In peacetime, capital has a habit of fleeing restricted economies and finding freer ones. If you have some money to invest, and you're presented with two opportunities— both equal in every respect except that one has a government profit cap of 5%, and one has no such cap and a 10% expected return, where are you going to put your money? What holds for you holds in general. Capital will move towards profitable endeavors, even if that means overseas investment. The government will end up playing a game of whack-a-mole, plugging up holes in its price control schemes, restricting the ability for money to leave the country, etc. We've seen it in the Soviet Union. We've seen it in China. We've seen it in Turkey. We've seen it just about anywhere peacetime price controls have been implemented.&lt;/p&gt;
+&lt;p&gt;With all of that said, Galbraith is worth reading. He is thoughtful, intelligent, and witty. Everything I've read of his has given me both enjoyment and many long moments of reflection.&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>Communication Firehose</title>
+      <link>https://christophilus.com/blog/communication-firehose.html</link>
+      <guid>https://christophilus.com/blog/communication-firehose.html</guid>
+      <pubDate>Fri, 06 Sep 2024 12:00:00 GMT</pubDate>
+      <description>&lt;h1&gt;Communication Firehose&lt;/h1&gt;
+&lt;p&gt;Without intentionality, you will find yourself at the center of a barrage of notifications. Each one clamoring for your attention. Each one giving you that dopamine hit. Each one making you feel productive. Each one distracting you from your &lt;em&gt;actual&lt;/em&gt; work.&lt;/p&gt;
+&lt;p&gt;Busyness and productivity are rarely the same thing. (My most productive moments often &lt;a href=&quot;https://www.youtube.com/watch?v=f84n5oFoZBc&quot;&gt;happen in a hammock&lt;/a&gt;.) It's possible to be too busy to get anything meaningful done.&lt;/p&gt;
+&lt;h2&gt;The big picture&lt;/h2&gt;
+&lt;p&gt;What are the sources of interruption and distraction in your life? It's worth taking the time to reflect and write them down. Here's a helpful starting point:&lt;/p&gt;
+&lt;ul&gt;&lt;li&gt;SMS&lt;/li&gt;&lt;li&gt;Phone calls&lt;/li&gt;&lt;li&gt;Email&lt;/li&gt;&lt;li&gt;Slack&lt;/li&gt;&lt;li&gt;HelpScout&lt;/li&gt;&lt;li&gt;GitHub&lt;/li&gt;&lt;li&gt;Basecamp&lt;/li&gt;&lt;li&gt;Whatsapp&lt;/li&gt;&lt;li&gt;Twitter&lt;/li&gt;&lt;li&gt;Instagram&lt;/li&gt;&lt;li&gt;Facebook&lt;/li&gt;&lt;li&gt;Snapchat&lt;/li&gt;&lt;li&gt;Signal&lt;/li&gt;&lt;li&gt;HackerNews&lt;/li&gt;&lt;li&gt;Telegram&lt;/li&gt;&lt;li&gt;Folks walking into your office&lt;/li&gt;&lt;/ul&gt;
+&lt;p&gt;&quot;Wait, wait,&quot; some of you say. &quot;You cheated there by tossing in a bunch of non-business social media platforms.&quot;&lt;/p&gt;
+&lt;p&gt;Well, you're a human being, not an AI chatbot. When you're assessing information and communication overload, you need to assess the entire picture, not just the 9-5.&lt;/p&gt;
+&lt;p&gt;If your job is to get focused, creative, deep-thinking work done, then your number one priority is to cull that long list of communication channels. If you can get it down to one or two, you win.&lt;/p&gt;
+&lt;p&gt;If you can get it to zero, you've accomplished Zen.&lt;/p&gt;
+&lt;h2&gt;Potential for interruption is a productivity-killer&lt;/h2&gt;
+&lt;p&gt;I've found that the &lt;em&gt;potential&lt;/em&gt; for interruption is my real focus-killer. It's not the interruption that bothers me as much as it is the &lt;em&gt;anticipation&lt;/em&gt; of interruption. The ever-present potential keeps my brain from sliding into that deep-focus groove. In the back of my head, there's always a little man reining me in and saying, &quot;Woah woah! Slow down! There may be trouble around that corner!&quot;&lt;/p&gt;
+&lt;p&gt;Every day, I set aside a place and time for uninterruptible focus.&lt;/p&gt;
+&lt;h2&gt;My system&lt;/h2&gt;
+&lt;p&gt;&quot;What do I need to do next?&quot;&lt;/p&gt;
+&lt;p&gt;I ask this question several times per day. There's a single place where I find the answer. That place is GitHub. I don't have to search across a broad range of tools to answer that question, and neither should you. Simplicity is they key to productivity.&lt;/p&gt;
+&lt;p&gt;I also don't participate in a long list of communication systems. When my GitHub notifications are clear, I'm done with communication. If something is really urgent, my teammates know to text or call me (my phone lets them through its 24/7 do-not-disturb mode).&lt;/p&gt;
+&lt;p&gt;By minimizing time spent on communication, I am able to maximize time spent delivering value. By having only one source of communication, I'm able to avoid the frictional cost of searching for information across a million different places. &quot;Now, &lt;em&gt;where&lt;/em&gt; did I have that conversation, again?&quot; It's always GitHub.&lt;/p&gt;
+&lt;p&gt;Speaking from experience, that cost really adds up over time. It's well worth the effort to eliminate it. You may not be able to get yourself down to a single communication channel, but you'll benefit from being intentional about it. I've never been happier than I currently am, and my tightly-controlled communication strategy is a big part of why.&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>Why is deflation bad?</title>
+      <link>https://christophilus.com/blog/why-is-deflation-bad.html</link>
+      <guid>https://christophilus.com/blog/why-is-deflation-bad.html</guid>
+      <pubDate>Fri, 30 Aug 2024 12:00:00 GMT</pubDate>
+      <description>&lt;h1&gt;Why is deflation bad?&lt;/h1&gt;
+&lt;p&gt;I recently argued that deflation ought to be a good thing. If everything gets less expensive over time, savers are rewarded, retirees on fixed pensions are rewarded, basic necessities become more affordable to more people. Shouldn't deflation be a boon to the poor? What's not to love? Well, plenty.&lt;/p&gt;
+&lt;p&gt;I'm reading &lt;a href=&quot;https://a.co/d/6Il5k4k&quot;&gt;Money&lt;/a&gt; by John Kenneth Galbraith. It is written with a dry wit that I find irresistible, and it's loaded with interesting tidbits. For example, Europe experienced a period of inflation after the New World was discovered. Large volumes of gold were imported, inflating the supply of supposedly &quot;hard&quot; money. It's a good example of monetary inflation, and also underscores a weakness in the gold standard.&lt;/p&gt;
+&lt;p&gt;Anyway, on the topic of deflation, Galbraith writes about a particular deflationary period. At the time, many farms were financed by loans. They had fixed payments similar to a mortgage, however, due to deflation, the farmers' income shrank. The price of a bushel of wheat dropped by something like 50% over the course of several years. Imagine if your boss cut your paycheck in half, but you still had to make the same mortgage or rent payments as before! That's the effect deflation has on debtors.&lt;/p&gt;
+&lt;p&gt;In a deflationary period, business are hesitant to finance expansion in part because they'll have to pay back the debt with more valuable currency. As a result, economic activity slows. As economic activity slows, business turns ever more sour, and employees must be laid off. Folks who are laid off are no longer able to afford their former way of life, so buying slows further, deepening the economic rut. Deflation can quickly lead to depression.&lt;/p&gt;
+&lt;p&gt;Our economy runs on debt. You might argue that it shouldn't, but as far as I can tell, every advanced economy that ever existed ran on debt. Unless we can invent a wholly different economic model, deflation will forever remain a real hazard.&lt;/p&gt;
+&lt;p&gt;I'll let Galbraith have the final word on the optimism with which we should greet economic innovation. &quot;A constant in the history of money is that every remedy is reliably a source of new abuse.&quot;&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>Switching to Linux</title>
+      <link>https://christophilus.com/blog/switching-to-linux.html</link>
+      <guid>https://christophilus.com/blog/switching-to-linux.html</guid>
+      <pubDate>Fri, 23 Aug 2024 12:00:00 GMT</pubDate>
+      <description>&lt;h1&gt;Switching to Linux&lt;/h1&gt;
+&lt;p&gt;In 2020, I switched to Linux. If you're considering making the switch, I recommend it. Here's my unsolicited advice.&lt;/p&gt;
+&lt;h2&gt;Fedora&lt;/h2&gt;
+&lt;p&gt;The Linux ecosystem presents you with a &lt;em&gt;lot&lt;/em&gt; of choices. &lt;a href=&quot;https://old.reddit.com/r/distrohopping&quot;&gt;Distrohopping&lt;/a&gt; is a deep, unproductive rabbit hole. There's a distro for everyone, including some really esoteric ones. But, if you're just starting out, you'll do well to stick with a mainstream distro for a while-- some flavor of Debian or Fedora. Sticking with a major distro gives you a better chance of finding help online and better odds that the software you need is readily available.&lt;/p&gt;
+&lt;p&gt;If you have an NVIDIA graphics card, install &lt;a href=&quot;https://pop.system76.com/&quot;&gt;Pop&lt;/a&gt;. Otherwise, I recommend &lt;a href=&quot;https://fedoraproject.org/&quot;&gt;Fedora&lt;/a&gt; because it's a good balance of up-to-date software, reasonable defaults, and an excellent out-of-the-box vanilla Gnome desktop.&lt;/p&gt;
+&lt;h2&gt;Gnome&lt;/h2&gt;
+&lt;p&gt;And that brings us to the desktop.&lt;/p&gt;
+&lt;p&gt;The Linux operating system is separate from the desktop experience. On Windows and OSX, the desktop and the OS are so intertwined that it's a distinction without a difference. With Linux, you have a number of desktop environments to choose from. You can also build your own by cobbling together a window manager (of which there are many) and various supporting tools.&lt;/p&gt;
+&lt;p&gt;Of all the Linux desktops, my preference is Gnome. Yours may be different, but I'd give Gnome a shot, as it's the most popular desktop, so you'll find a lot of support online around it. Gnome's UI is consistent-- fonts, padding, margins, iconography, etc-- and for me, this consistency makes a difference. In all of the other desktops I tried, there was just something off-- misalignments here, narrow padding there, inconsistencies that simply grated on my nerves.&lt;/p&gt;
+&lt;p&gt;Gnome's UI is minimal. It doesn't have a dock by default (though you can get one via extensions). It stays out of your way. For some, it takes a while to get used to. My advice is to try it for a while before you decide that it's not for you. If you can get used to it, it's a pleasant, polished experience.&lt;/p&gt;
+&lt;h2&gt;Gaming&lt;/h2&gt;
+&lt;p&gt;Valve has worked hard to make the &lt;a href=&quot;https://store.steampowered.com/&quot;&gt;Steam&lt;/a&gt; experience first-class on Linux. The &lt;a href=&quot;https://www.steamdeck.com/en/&quot;&gt;Steam Deck&lt;/a&gt; is a Linux-powered handheld gaming system developed by Valve, so their commitment to Linux runs deep. Outside of Nintendo, I don't play any AAA games. My preference is for &lt;a href=&quot;https://buried-treasure.org/&quot;&gt;indie games&lt;/a&gt;, and every one I've tried has worked on Linux without a problem.&lt;/p&gt;
+&lt;h2&gt;Window managers&lt;/h2&gt;
+&lt;p&gt;At some point, you'll stumble across window managers. To oversimplify a bit, these are lightweight alternatives to desktop environments. They focus only on arranging windows. All of the other niceties of a desktop-- application launchers, control centers, etc-- are left up to you to install and configure as you see fit. Most window managers are &lt;a href=&quot;https://wiki.archlinux.org/title/Window_manager#Tiling_window_managers&quot;&gt;tiling window managers&lt;/a&gt; I've never gotten the hang of them. I don't have any use for tiny, stacked windows. However, there &lt;em&gt;is&lt;/em&gt; a window manager that I absolutely love, and that is &lt;a href=&quot;https://github.com/YaLTeR/niri&quot;&gt;niri&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;Niri is a scrolling window manager, inspired by the &lt;a href=&quot;https://github.com/paperwm/PaperWM&quot;&gt;PaperWM&lt;/a&gt; extension (which is the only Gnome extension I use). It arranges your windows on an infinite horizontal plane. You can quickly navigate forwards and backwards through your windows, hop between workspaces, etc without lifting your hands from your keyboard. I love it.&lt;/p&gt;
+&lt;p&gt;I'm writing this from Niri, running on &lt;a href=&quot;https://archlinux.org/&quot;&gt;Arch&lt;/a&gt;. It's a great combo for folks who don't mind spending a fair bit of time tinkering to get things set up just the way they like. You can easily install Niri on Fedora, and switch between it and Gnome without a hitch. I certainly wouldn't start with this setup, though, as it does require tinkering, and is not for beginners.&lt;/p&gt;
+&lt;h2&gt;Hardware&lt;/h2&gt;
+&lt;p&gt;If you're thinking of buying a new laptop, I've had great experiences with the Dell XPS lineup. &lt;a href=&quot;https://frame.work/&quot;&gt;Framework&lt;/a&gt; and &lt;a href=&quot;https://system76.com/&quot;&gt;system76&lt;/a&gt; both have great reputations, too. My next laptop will probably be a framework. I tend to avoid Lenovo, even though it's a reputable Linux champ-- simply because I try to avoid 100% Chinese-owned electronics companies out of a (possibly misplaced) paranoia.&lt;/p&gt;
+&lt;h2&gt;Have fun&lt;/h2&gt;
+&lt;p&gt;Linux has come a long way since I first tried it in 2000. Back then, I mocked my Linux friends because they'd spend all of their time tinkering, configuring, and troubleshooting. I'd spend all my time building software and solving actual problems. I programmed circles around them, thanks to Windows 2000 and Visual C++ 6. Good times.&lt;/p&gt;
+&lt;p&gt;Today, Linux is a totally different beast. It works out of the box on most modern hardware. And installing software is often &lt;em&gt;easier&lt;/em&gt; than on Windows or OSX, thanks to built-in package managers.&lt;/p&gt;
+&lt;p&gt;I've enjoyed Linux far more than I ever expected to. I made the switch when my Macbook broke down, and the repair was going to take a week. I threw Linux on an old laptop, and was off to the races. By the time my Macbook came back, I was done with OSX.&lt;/p&gt;
+&lt;p&gt;At first, I distro-hopped a &lt;em&gt;lot&lt;/em&gt;: Fedora, Debian, Ubuntu, Pop, Arch, Void, Manjaro, Solus, and a bunch I don't even remember. I tried a bunch of WMs and DEs, and everything imaginable. It was fun!&lt;/p&gt;
+&lt;p&gt;But now, I've mostly settled and am focused on being productive. For me, that means Fedora or Arch, Gnome or Niri, and Neovim for just about everything (programming and composing nearly all written communication).&lt;/p&gt;
+&lt;p&gt;Your path will be different, and that's the beautiful thing about Linux.&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>Bun DIY: Tailwind Lite</title>
+      <link>https://christophilus.com/blog/bun-diy-tailwind-like-css-processing.html</link>
+      <guid>https://christophilus.com/blog/bun-diy-tailwind-like-css-processing.html</guid>
+      <pubDate>Fri, 16 Aug 2024 12:00:00 GMT</pubDate>
+      <description>&lt;h1&gt;Bun DIY: Tailwind Lite&lt;/h1&gt;
+&lt;p&gt;When I started my zero-dependency Bun application experiment, I had no plans to build a CSS processing layer. My plan was to just hand-roll my CSS like any self-respecting neanderthal. &lt;em&gt;But...&lt;/em&gt; I'd forgotten how much I like the convenience of fire and wheels and tools and suchlike. Within a few minutes, I was already well on my way to writing a steaming pile of unmaintainable spaghetti. Thus, I decided to write Tailwind from scratch with zero dependencies.&lt;/p&gt;
+&lt;p&gt;&lt;a href=&quot;https://github.com/chrisdavies/atomic-css&quot;&gt;Here's what that looks like&lt;/a&gt;. Take a look under the hood, and poke around if you dare.&lt;/p&gt;
+&lt;h2&gt;Building Tailwind from scratch&lt;/h2&gt;
+&lt;p&gt;Tailwind is huge, and I don't use all of it. I figured the 80/20 rule would give me a good shot at building something useful without spending the rest of my life doing it.&lt;/p&gt;
+&lt;p&gt;What I built supports:&lt;/p&gt;
+&lt;ul&gt;&lt;li&gt;The basic rules (e.g. &lt;code&gt;p-2 m-8 bg-red-600&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;Pseudo selectors (e.g. &lt;code&gt;hover:bg-blue-600&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;Responsive breakpoints (e.g. &lt;code&gt;md:w-full&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;Dark / light mode (e.g. &lt;code&gt;dark:bg-gray-800&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;CSS file &lt;code&gt;@tailwind base;&lt;/code&gt; and &lt;code&gt;@tailwind utilities&lt;/code&gt; slots&lt;/li&gt;&lt;li&gt;Extracting rules from &lt;code&gt;@layer utilities&lt;/code&gt;&lt;/li&gt;&lt;li&gt;Inlining relative &lt;code&gt;@import&lt;/code&gt; files&lt;/li&gt;&lt;li&gt;Efficient, incremental builds in watch-mode&lt;/li&gt;&lt;li&gt;Customization via configuration&lt;/li&gt;&lt;li&gt;Reusing rules in CSS files with the &lt;code&gt;@apply&lt;/code&gt; directive&lt;/li&gt;&lt;/ul&gt;
+&lt;p&gt;I won't bore you with a comprehensive list of what the library &lt;em&gt;doesn't&lt;/em&gt; support, but there are three big missing features that I should note:&lt;/p&gt;
+&lt;ul&gt;&lt;li&gt;No custom rules (e.g. &lt;code&gt;text-[240rem]&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;No themes or plugins&lt;/li&gt;&lt;li&gt;Only basic &lt;code&gt;@apply&lt;/code&gt; support— no pseudo-selectors&lt;/li&gt;&lt;/ul&gt;
+&lt;p&gt;The lack of custom rules isn't a huge deal to me, as I never use them. If I really need a custom rule, I create one in my CSS file, generally in the utilities layer.&lt;/p&gt;
+&lt;p&gt;Themes and plugins are similarly not a thing I care about. Supporting them would probably add a lot of complexity, and I don't need them for my use-case.&lt;/p&gt;
+&lt;p&gt;As for the limited implementation of &lt;code&gt;@apply&lt;/code&gt;, it turns out that you can get 80% of the value of the components layer by writing something like this:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-css&quot;&gt;&lt;span class=&quot;hl-keyword&quot;&gt;@layer&lt;/span&gt; components {
+  &lt;span class=&quot;hl-keyword&quot;&gt;.yourselector&lt;/span&gt; {
+    &lt;span class=&quot;hl-keyword&quot;&gt;@apply&lt;/span&gt; bg-red-&lt;span class=&quot;hl-number&quot;&gt;600&lt;/span&gt; text-white;
+    &amp;amp;:hover {
+      &lt;span class=&quot;hl-keyword&quot;&gt;@apply&lt;/span&gt; bg-sky-&lt;span class=&quot;hl-number&quot;&gt;600&lt;/span&gt;;
+    }
+    &lt;span class=&quot;hl-keyword&quot;&gt;@media&lt;/span&gt; (min-width: &lt;span class=&quot;hl-number&quot;&gt;48rem&lt;/span&gt;) {
+      &lt;span class=&quot;hl-keyword&quot;&gt;@apply&lt;/span&gt; w-full;
+    }
+  }
+}&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;That is the equivalent of this Tailwind component:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-css&quot;&gt;&lt;span class=&quot;hl-keyword&quot;&gt;@layer&lt;/span&gt; components {
+  &lt;span class=&quot;hl-keyword&quot;&gt;.yourselector&lt;/span&gt; {
+    &lt;span class=&quot;hl-keyword&quot;&gt;@apply&lt;/span&gt; bg-red-&lt;span class=&quot;hl-number&quot;&gt;600&lt;/span&gt; text-white hover:bg-sky-&lt;span class=&quot;hl-number&quot;&gt;600&lt;/span&gt; md:w-full;
+  }
+}&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The inability to reuse breakpoints via &lt;code&gt;@apply&lt;/code&gt; is probably the biggest drawback to my simplified approach.&lt;/p&gt;
+&lt;h2&gt;How it works&lt;/h2&gt;
+&lt;p&gt;The atomic-css layer works roughly like this:&lt;/p&gt;
+&lt;ul&gt;&lt;li&gt;Build the full configuration by merging the user and default configurations&lt;/li&gt;&lt;li&gt;Generate a (massive) rule lookup table based on the configuration&lt;/li&gt;&lt;li&gt;Load the CSS (any any CSS referenced by basic @import statements)&lt;/li&gt;&lt;li&gt;Extract utility rules from the CSS and update the lookup table with them&lt;/li&gt;&lt;li&gt;Expand the &lt;code&gt;@apply&lt;/code&gt; directives based on the lookup table rules&lt;/li&gt;&lt;li&gt;Scan the source directories, extracting any Tailwind-like class names&lt;/li&gt;&lt;li&gt;Create a set of all of the referenced rules&lt;/li&gt;&lt;li&gt;Convert that set to the final CSS&lt;/li&gt;&lt;/ul&gt;
+&lt;p&gt;For example, here's a simplified subset of the rules table that we generate from the config:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-ts&quot;&gt;&lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; rules = {
+ &lt;span class=&quot;hl-string&quot;&gt;'text-sky-500/50'&lt;/span&gt;: {
+    css: &lt;span class=&quot;hl-string&quot;&gt;`color: rgb(14 165 233 / 0.5);`&lt;/span&gt;,
+    &lt;span class=&quot;hl-comment&quot;&gt;// etc...&lt;/span&gt;
+  },
+};&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;When we scour the source for class names, we come across this: &lt;code&gt;dark:hover:text-sky-500/50&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;We parse this into two parts:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-ts&quot;&gt;{
+  pseudos: [&lt;span class=&quot;hl-string&quot;&gt;'dark'&lt;/span&gt;, &lt;span class=&quot;hl-string&quot;&gt;'hover'&lt;/span&gt;],
+  name: &lt;span class=&quot;hl-string&quot;&gt;'text-sky-500/50'&lt;/span&gt;,
+}&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;We then look up the rule by name and find our definition.&lt;/p&gt;
+&lt;p&gt;Finally, we build an output rule:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-ts&quot;&gt;{
+  selector: &lt;span class=&quot;hl-string&quot;&gt;'.dark dark\:hover\:text-sky-500\/50:hover'&lt;/span&gt;,
+  css: &lt;span class=&quot;hl-string&quot;&gt;`color: rgb(14 165 233 / 0.5);`&lt;/span&gt;,
+  &lt;span class=&quot;hl-comment&quot;&gt;// etc...&lt;/span&gt;
+}&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Before we write our final CSS, we deduplicate references, combine selectors where possible, etc, and finally write a CSS file that contains only the rules we actually use in our application, in a relatively compact form.&lt;/p&gt;
+&lt;p&gt;Everything was pretty simple to implement, but I did cut some corners. The &lt;a href=&quot;https://github.com/chrisdavies/atomic-css/blob/main/lib/atomic-css/css-parser.ts&quot;&gt;CSS parser&lt;/a&gt; is particularly naive. It has many flaws. For example, it treats &lt;code&gt;@layer base;&lt;/code&gt; and &lt;code&gt;@layer 'base';&lt;/code&gt; as two distinct values. But for my purposes, it's fine. It should gracefully handle all of the CSS I've ever written in my career.&lt;/p&gt;
+&lt;h2&gt;The result&lt;/h2&gt;
+&lt;p&gt;This was a lot more work than I anticipated— more than the single weekend that I usually allocate for such projects. Much of the work was copy / pasting rules from Tailwind's excellent docs. This was tedious. Maybe I should have automated it. Take a look at the &lt;a href=&quot;https://github.com/chrisdavies/atomic-css/blob/main/lib/atomic-css/rule-gen.ts&quot;&gt;rule-gen.ts&lt;/a&gt; file to see what I mean by tedious.&lt;/p&gt;
+&lt;p&gt;In the end, I got a working solution up and running fairly quickly. I'm sure there are plenty of bugs and unintentionally missing features, but the proof of concept is there. And even though it's not a thorough implementation, it's enough to warrant some observations.&lt;/p&gt;
+&lt;p&gt;The code is quite fast, and I haven't bothered to optimize it. It performs a full build of my $dayjob codebase in around 175 milliseconds compared to over 2 seconds for Tailwind. Incremental builds are similarly fast. This solves a real pain-point I've had with Tailwind, and makes me wonder if it's worth turning this into a full-fledged, production-ready library.&lt;/p&gt;
+&lt;p&gt;I'm not 100% sure exactly why it's so much faster, but I have a pretty good hunch:&lt;/p&gt;
+&lt;ul&gt;&lt;li&gt;I've only implemented a subset of Tailwind, so I'm doing less&lt;/li&gt;&lt;li&gt;Tailwind is pluggable— my library is not&lt;/li&gt;&lt;li&gt;Tailwind ties into postcss and other tools, where my tool is standalone&lt;/li&gt;&lt;li&gt;Tailwind supports complex rules which prevent the lookup table approach&lt;/li&gt;&lt;/ul&gt;
+&lt;p&gt;I suspect this last point accounts for most of the difference. Converting a class name to a CSS rule is an O(1) operation for my library. Tailwind could use this same technique for many of its rules, but not for all of them (e.g. custom value class names wouldn't work), so I'd guess that Tailwind runs a less optimal, but more extensible algorithm for matching class names to rules.&lt;/p&gt;
+&lt;h2&gt;Future optimizations n' such&lt;/h2&gt;
+&lt;p&gt;The lookup table is big. Colors are to blame. For every color, we generate many rules: bg, text, border, gradient stops, etc, and &lt;em&gt;all&lt;/em&gt; of the opacity variations of those. This consumes a few megs of RAM, and takes around 30ms to generate on my dev laptop. An optimization I may consider in the future is to lazily generate the opacity variants (e.g. &lt;code&gt;text-white/50&lt;/code&gt;) rather than eagerly generating them.&lt;/p&gt;
+&lt;h2&gt;Footnote: why Tailwind?&lt;/h2&gt;
+&lt;p&gt;Before I wrap up, I thought I'd explain why I like Tailwind so much.&lt;/p&gt;
+&lt;p&gt;I've worked on web applications for over 20 years, and without fail, in every project I worked on, the CSS was the worst part.&lt;/p&gt;
+&lt;p&gt;We all know that we should generally avoid globals in our programs. Any seasoned programmer works to avoid side-effects. Avoiding global, mutable state produces simpler programs, as anyone who has flirted with functional programming can attest. And yet, with CSS, we essentially have a language in which all variables are global and any change you make will probably have unanticipated side-effects.&lt;/p&gt;
+&lt;p&gt;On a long-running, large project, the CSS requires superhuman discipline and organizational thought. Find a web application that is older than 5 years, and you'll find all sorts of dead CSS that is still sitting there because folks are too afraid to touch it. This is so common that you could accurately describe legacy CSS as an append-only language.&lt;/p&gt;
+&lt;blockquote&gt;&lt;p&gt;There are only two hard things in Computer Science: cache invalidation and naming things.&lt;/p&gt;
+&lt;p&gt;   — Phil Karlton&lt;/p&gt;&lt;/blockquote&gt;
+&lt;p&gt;CSS requires you to invent names. A lot of names. You have to name every. Single. Thing. Naming is hard, ergo CSS is hard.&lt;/p&gt;
+&lt;p&gt;Maintainable code requires two things: the ability to fearlessly delete and refactor, and the ability to reason locally. If you hop into a simple component you should be able to read it quickly from top to bottom, understand what it does, and make the changes you want. The more files you have to jump between, the harder this task becomes. Understandability is impeded by separating concerns across CSS / JS / HTML boundaries rather than across component boundaries. The traditional approach to hand-rolling CSS ensures that you're always jumping between at least two files in order to reason about a component.&lt;/p&gt;
+&lt;p&gt;Tailwind solves all of these problems, and it solves it elegantly. With Tailwind, you get:&lt;/p&gt;
+&lt;ul&gt;&lt;li&gt;Fearless refactoring&lt;/li&gt;&lt;li&gt;Minimal side-effects&lt;/li&gt;&lt;li&gt;Only the rules actively used by your application end up in your CSS&lt;/li&gt;&lt;li&gt;Far less time spent naming things&lt;/li&gt;&lt;li&gt;Locality of reasoning&lt;/li&gt;&lt;/ul&gt;
+&lt;p&gt;Tailwind is functional programming for CSS. I love it.&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>Why write zero-dependency software?</title>
+      <link>https://christophilus.com/blog/zero-dependency-applications-in-bun.html</link>
+      <guid>https://christophilus.com/blog/zero-dependency-applications-in-bun.html</guid>
+      <pubDate>Mon, 12 Aug 2024 12:00:00 GMT</pubDate>
+      <description>&lt;h1&gt;Why write zero-dependency software?&lt;/h1&gt;
+&lt;p&gt;Over the past few weeks, I've been tinkering with building a project from scratch in Bun. Here's why I'm doing this.&lt;/p&gt;
+&lt;p&gt;There are &lt;a href=&quot;https://news.ycombinator.com/item?id=40791829&quot;&gt;many&lt;/a&gt; &lt;a href=&quot;https://news.ycombinator.com/item?id=29863672&quot;&gt;examples&lt;/a&gt; &lt;a href=&quot;https://news.ycombinator.com/item?id=38969533&quot;&gt;of&lt;/a&gt; &lt;a href=&quot;https://news.ycombinator.com/item?id=39865810&quot;&gt;supply&lt;/a&gt; &lt;a href=&quot;https://news.ycombinator.com/item?id=30703817&quot;&gt;chain&lt;/a&gt; &lt;a href=&quot;https://news.ycombinator.com/item?id=25413053&quot;&gt;vulnerabilities&lt;/a&gt;. In particular, the JavaScript / TypeScript world has a reputation for pulling in dependencies for even the most basic needs. I once had a job working on a popular open source project whose &lt;code&gt;package.json&lt;/code&gt; was over 1,700 lines long. It installed over 13,000 dependencies. It's impossible to reason about the security of such an application.&lt;/p&gt;
+&lt;p&gt;Building things yourself won't necessarily protect you from security vulnerabilities. In fact, you may be &lt;em&gt;more likely&lt;/em&gt; to introduce vulnerabilities by building something from scratch. It's common knowledge, for example, that you shouldn't build your own encryption library, as you're likely to get things wrong, and a hacker will happily take advantage of that. That said, in general, if you minimize your dependencies, you shrink your attack surface.&lt;/p&gt;
+&lt;p&gt;When done right, building things yourself improves long-term maintainability. You're more likely to be able to fix bugs in small, simple, focused code you write than when you're dealing with large, general, and abstract third-party libraries. This isn't always true-- as anyone who has inherited someone else's spaghetti can attest. You can make a real mess of things when you build things yourself, and your home-grown solutions will likely be poorly documented compared to a popular npm package that solves a similar problem. Discernment is required.&lt;/p&gt;
+&lt;p&gt;There's another reason to build things from scratch: it's a fun way to learn.&lt;/p&gt;
+&lt;blockquote&gt;&lt;p&gt;This isn't a zero-dependency project! It requires Bun which itself pulls in a whole nest of dependencies (Zig, SQLite, JavaScriptCore, etc). It runs on a Linux distro which is a massive web of dependencies. It requires electricity from the nearby nuclear power plant which in turn requires uranium mines. This requires a somewhat advanced civilization with the ability to coordinate and secure supply chains. No project is an island unto itself.&lt;/p&gt;
+&lt;p&gt;— Hacker News Pedants, probably&lt;/p&gt;&lt;/blockquote&gt;
+&lt;p&gt;As an educational device, I'm taking an extreme, impractical, and ill-advised hard-line approach on this side project. I'm not suggesting that anyone wages a total anti-dependency war at their day job. (I mean, if you want to lose your job, it's a creative way to quit. So there's that.) What I &lt;em&gt;am&lt;/em&gt; suggesting is that the industry generally-- and JavaScript developers in particular-- could use a nudge towards reducing dependencies.&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>Simple dependencies</title>
+      <link>https://christophilus.com/blog/simple-dependencies.html</link>
+      <guid>https://christophilus.com/blog/simple-dependencies.html</guid>
+      <pubDate>Fri, 09 Aug 2024 12:00:00 GMT</pubDate>
+      <description>&lt;h1&gt;Simple dependencies&lt;/h1&gt;
+&lt;p&gt;Simplicity. We all want it, yet it eludes us. We reach for complex tools to solve simple problems, but we all know that most problems are best solved by composing simple tools. Small teams can accomplish much, if they aren't overburdened by a poorly-fitting mishmash of tools.&lt;/p&gt;
+&lt;p&gt;It's a strange twist of psychology that leads us to reach for complexity. I don't know what's behind it, but I suspect there's some comfort in knowing, &quot;This tool can do &lt;em&gt;anything&lt;/em&gt;!&quot; Most of the time, though, the sales pitch, &quot;This can do anything!&quot;, should be viewed not as a bonus, but as a warning. You don't want a tool that can do &lt;em&gt;anything&lt;/em&gt;. You want to solve a specific problem as directly, simply, and effectively as possible. These super flexible tools are almost never ideal for anything at all.&lt;/p&gt;
+&lt;p&gt;High-friction dependencies have multiplicative complexity. Each new not-quite-fitting dependency detracts from understandability in a non-linear way. It adds friction to maintenance tasks. Often, it degrades morale. If you dread touching a part of the system because it relies on a confusing mess of spaghetti dependencies, you're in the dependency doldrums, and your project is in trouble.&lt;/p&gt;
+&lt;p&gt;I have seen projects extend for months, and sometimes fail, simply because they were being built on the wrong (often very general, off-the-shelf) foundational tooling. I've been part of shipping solutions in the wake of such projects, and my success was almost entirely due to a focus on shipping something &quot;good enough&quot; with as simple a foundation as possible.&lt;/p&gt;
+&lt;p&gt;An example: a team had been working for several months-- close to a year, I think-- trying to solve a customer's problem. For their stack, they had chosen Sharepoint and SQL Server Reporting Services. The project never shipped. Trivial tasks would take them weeks. With a deadline fast approaching, I was brought in to turn things around. I asked, &quot;What problem are we trying to solve for the customer?&quot; It turned out to be a simple data-ingesting and reporting problem. My solution? A simple database, and a single ASP.NET page. This solution turned out to be an order of magnitude faster than the proposed solution, and probably several orders of magnitude simpler. It took maybe a week in total (including testing, Q/A, some design iterations), and our customers got what they needed.&lt;/p&gt;
+&lt;p&gt;This is not an isolated example. In my 20+ years as a software engineer, I have seen many examples of this same pathology.&lt;/p&gt;
+&lt;p&gt;How do you avoid this trap? How do you know if a tool is a good fit for the job? There's no surefire way. If you dread touching anything in the vicinity of the tool, that's a tell. But, that's a retrospective tell. Ideally, we'd have some rules of thumb which help us to avoid complexity in the first place.&lt;/p&gt;
+&lt;h2&gt;Have a bias for building it in-house&lt;/h2&gt;
+&lt;p&gt;This is my first rule of thumb. It's pejoratively known as &quot;Not Invented Here Syndrome&quot;. And, it can lead to nasty results. You think that off-the-shelf system was bad? Wait till you get a load of the spaghetti our team slapped together last week! Good luck maintaining &lt;em&gt;that&lt;/em&gt; monstrosity!&lt;/p&gt;
+&lt;p&gt;I think the downsides of NIH Syndrome are well known. But the upsides are rarely discussed.&lt;/p&gt;
+&lt;p&gt;First, if you have a decent team of engineers, they're unlikely to produce a terrible mess. They'll produce a mess-- we all do-- but it shouldn't be terrible.&lt;/p&gt;
+&lt;p&gt;Second, if it's &lt;em&gt;your&lt;/em&gt; mess, you can generally find your way around it. Maintaining &lt;em&gt;your own&lt;/em&gt; mess is almost always easier than maintaining someone else's.&lt;/p&gt;
+&lt;p&gt;Third, with just a bit of forethought, composing simple tools into a final solution can be done in such a way that each piece is quickly understandable, and removal of any given piece is relatively trivial.&lt;/p&gt;
+&lt;h2&gt;Have a bias for deletability&lt;/h2&gt;
+&lt;p&gt;If you &lt;em&gt;must&lt;/em&gt; pull in a dependency, choose one that is easy to replace. This isn't always possible. Your ORM or database layer is generally difficult to replace. If you &lt;em&gt;know&lt;/em&gt; the dependency will be hard to replace, spend some time finding exploring its rough edges and limitations before committing to it. This is usually best done by building a throwaway prototype that is as real-world as you can make it given your time constraints.&lt;/p&gt;
+&lt;h2&gt;Ask questions first, shoot second&lt;/h2&gt;
+&lt;p&gt;When considering a new problem for which there may be an existing off-the-shelf solution, here are some questions I use:&lt;/p&gt;
+&lt;ul&gt;&lt;li&gt;How hard is it to build a simple solution, following the 80/20 rule?&lt;/li&gt;&lt;li&gt;How many jobs does this potential dependency perform? The fewer the better.&lt;/li&gt;&lt;li&gt;How easy is it to rip out if it turns out to be a poor choice?&lt;/li&gt;&lt;li&gt;What are the potential pitfalls?&lt;/li&gt;&lt;li&gt;Where is it likely to go wrong?&lt;/li&gt;&lt;/ul&gt;
+&lt;h2&gt;Anyway&lt;/h2&gt;
+&lt;p&gt;I'm not trying to convince you to write everything in Assembly. Tools are good. Abstraction is necessary. But the cost of the wrong tool, the wrong abstraction, is high, and these costs tend to compound. It's worth considering and eliminating simpler solutions before reaching for the big-fancy-complected-solve-it-all tool.&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>Bun DIY: Sessions</title>
+      <link>https://christophilus.com/blog/bun-diy-sessions.html</link>
+      <guid>https://christophilus.com/blog/bun-diy-sessions.html</guid>
+      <pubDate>Fri, 02 Aug 2024 12:00:00 GMT</pubDate>
+      <description>&lt;h1&gt;Bun DIY: Sessions&lt;/h1&gt;
+&lt;p&gt;Sessions allow you to store data about a visitor of your site. It is usually used to identify who is making a request, but you can store any arbitrary data in a session. Sessions aren't baked into Bun, so we'll be building out a simple cookie-based session library in this article.&lt;/p&gt;
+&lt;h2&gt;Approaches&lt;/h2&gt;
+&lt;p&gt;There are two general ways to implement sessions:&lt;/p&gt;
+&lt;ol&gt;&lt;li&gt;Store session data in an encrypted cookie&lt;/li&gt;&lt;li&gt;Sotre session data in a database (Redis, Postgres, SQLite, etc), and store an unguessable random identifier in a cookie&lt;/li&gt;&lt;/ol&gt;
+&lt;p&gt;To keep this article relatively short, we're only going to focus on one strategy, and that is the encrypted cookie approach. Using an encrypted cookie doesn't require us to manage a data store, and is generally transferrable to any project.&lt;/p&gt;
+&lt;h2&gt;Generating session encryption keys&lt;/h2&gt;
+&lt;p&gt;Since our sessions require encryption, we'll need some encryption keys, and we'll want to store these in our config (&lt;code&gt;.env&lt;/code&gt;) so that sessions survive application restarts. To generate session encryption keys, run:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-sh&quot;&gt;bun lib/sessions/genkey.ts&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;This will print a &lt;code&gt;SESSION_KEYS&lt;/code&gt; environment variable to the console which you can place in your application config.&lt;/p&gt;
+&lt;p&gt;Alternatively, you can generate new session keys programmatically by calling the &lt;code&gt;genkey&lt;/code&gt; function which is exported from &lt;code&gt;lib/sessions&lt;/code&gt;:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-ts&quot;&gt;&lt;span class=&quot;hl-keyword&quot;&gt;import&lt;/span&gt; { genkey } &lt;span class=&quot;hl-keyword&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;hl-string&quot;&gt;'lib/sessions'&lt;/span&gt;;
+
+&lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; key = &lt;span class=&quot;hl-keyword&quot;&gt;await&lt;/span&gt; genkey();&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;Initializing the session middleware&lt;/h2&gt;
+&lt;p&gt;To attach session capabilities to our server, we'll Initialize and attach the session middleware:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-ts&quot;&gt;&lt;span class=&quot;hl-keyword&quot;&gt;import&lt;/span&gt; { makeSessionMiddleware } &lt;span class=&quot;hl-keyword&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;hl-string&quot;&gt;'lib/sessions'&lt;/span&gt;;
+
+&lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; sessionMiddleware = &lt;span class=&quot;hl-keyword&quot;&gt;await&lt;/span&gt; makeSessionMiddleware();
+
+&lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; requestHandler = (req: Request): Response =&amp;gt; &lt;span class=&quot;hl-keyword&quot;&gt;new&lt;/span&gt; Response(&lt;span class=&quot;hl-string&quot;&gt;'TODO...'&lt;/span&gt;);
+
+Bun.serve({ port, fetch: sessionMiddlewa(requestHandler) });&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;By default, the session middleware reads the encryption keys from &lt;code&gt;process.env.SESSION_KEYS&lt;/code&gt;. If you don't wish to use the &lt;code&gt;SESSION_KEYS&lt;/code&gt; environment variable, you can pass your own keys into the middleware. Here's an example which is the equivalent of the previous one:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-ts&quot;&gt;&lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; sessionMiddleware = &lt;span class=&quot;hl-keyword&quot;&gt;await&lt;/span&gt; makeSessionMiddleware({
+  keys: process.env.SESSION_KEYS!.split(&lt;span class=&quot;hl-string&quot;&gt;','&lt;/span&gt;),
+});&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;Creating and updating a session&lt;/h2&gt;
+&lt;p&gt;To create (or modify) a session, use the &lt;code&gt;setSession&lt;/code&gt; function, passing it a response and the session data. It returns a response which has the session cookie set.&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-ts&quot;&gt;&lt;span class=&quot;hl-keyword&quot;&gt;import&lt;/span&gt; { setSession } &lt;span class=&quot;hl-keyword&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;hl-string&quot;&gt;'lib/sessions'&lt;/span&gt;;
+
+&lt;span class=&quot;hl-keyword&quot;&gt;function&lt;/span&gt; hello(req: SessionRequest&amp;lt;any&amp;gt;): Response {
+  &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; response = &lt;span class=&quot;hl-keyword&quot;&gt;new&lt;/span&gt; Response(&lt;span class=&quot;hl-string&quot;&gt;`Hello, ${req.session.username}!`&lt;/span&gt;);
+  &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; setSession(response, { username: &lt;span class=&quot;hl-string&quot;&gt;'Jimbo'&lt;/span&gt; });
+}&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;A more realistic example might be a typical login response:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-ts&quot;&gt;&lt;span class=&quot;hl-keyword&quot;&gt;function&lt;/span&gt; loginRedirect(userId: string): Response {
+  &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; response = &lt;span class=&quot;hl-keyword&quot;&gt;new&lt;/span&gt; Response(&lt;span class=&quot;hl-string&quot;&gt;''&lt;/span&gt;, {
+    status: &lt;span class=&quot;hl-number&quot;&gt;303&lt;/span&gt;,
+    headers: {
+      Location: &lt;span class=&quot;hl-string&quot;&gt;'/'&lt;/span&gt;,
+    },
+  });
+  &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; setSession(response, { userId });
+}&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;Reading session state&lt;/h2&gt;
+&lt;p&gt;When a request has an active session, the session state can be accessed using the &lt;code&gt;request.session&lt;/code&gt; property, as in this example request handler:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-ts&quot;&gt;&lt;span class=&quot;hl-keyword&quot;&gt;function&lt;/span&gt; hello(req: SessionRequest&amp;lt;any&amp;gt;): Response {
+  &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;new&lt;/span&gt; Response(&lt;span class=&quot;hl-string&quot;&gt;`Hello, ${req.session.username}!`&lt;/span&gt;);
+}&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;Revoking a session / logging out&lt;/h2&gt;
+&lt;p&gt;If you want to end a session (log out), call &lt;code&gt;revokeSession&lt;/code&gt; like so:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-ts&quot;&gt;&lt;span class=&quot;hl-keyword&quot;&gt;import&lt;/span&gt; { revokeSession } &lt;span class=&quot;hl-keyword&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;hl-string&quot;&gt;'lib/sessions'&lt;/span&gt;;
+
+&lt;span class=&quot;hl-keyword&quot;&gt;function&lt;/span&gt; logout(req: Request): Response {
+  &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; revokeSession(
+    &lt;span class=&quot;hl-keyword&quot;&gt;new&lt;/span&gt; Response(&lt;span class=&quot;hl-string&quot;&gt;''&lt;/span&gt;, {
+      status: &lt;span class=&quot;hl-number&quot;&gt;303&lt;/span&gt;,
+      headers: {
+        Location: &lt;span class=&quot;hl-string&quot;&gt;'/login'&lt;/span&gt;,
+      },
+    }),
+  );
+}&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;Key rotation&lt;/h2&gt;
+&lt;p&gt;For security purposes, it makes sense to change your application's encryption key on a regular basis. If we only support one encryption key, changing that key would break all existing sessions, effectively logging out all users of your application. Since we presumably don't hate our users, we'll support up to N older encryption keys. N should be a small number, like 2-3. When we receive a request, we'll try to find the encryption key that was used to create the session cookie, and we'll re-encrypt the session with the latest key.&lt;/p&gt;
+&lt;p&gt;If the cookie is &lt;em&gt;so&lt;/em&gt; old that its key has fallen off of our list, the user's session will fail to decrypt. In this scenario, we don't throw an exception. Instead, we write the error to the console, and treat the request as if it is unauthenticated (a logged out / undefined session).&lt;/p&gt;
+&lt;h2&gt;Security implications&lt;/h2&gt;
+&lt;p&gt;When we set the session cookie, we restrict it in a number of ways in order to avoid common security pitfalls.&lt;/p&gt;
+&lt;p&gt;First, we prefix our cookie name with &lt;code&gt;__Host-&lt;/code&gt; which ensures our cookie is &lt;a href=&quot;https://developer.mozilla.org/en-US/docs/Web/HTTP/Cookies#cookie_prefixes&quot;&gt;domain-locked&lt;/a&gt;. (Our full cookie name is &lt;code&gt;__Host-session&lt;/code&gt;.)&lt;/p&gt;
+&lt;p&gt;Then, we give the cookie the following attributes.&lt;/p&gt;
+&lt;ul&gt;&lt;li&gt;&lt;code&gt;Secure&lt;/code&gt; ensures that the cookie is not transmitted in plain text (it's only sent over https except on localhost)&lt;/li&gt;&lt;li&gt;&lt;code&gt;HttpOnly&lt;/code&gt; prevents client-side scripts from accessing the cookie&lt;/li&gt;&lt;li&gt;&lt;code&gt;SameSite=Strict&lt;/code&gt; prevents the browser from sending the cookie to other domains (mitigating some cross-site vulnerabilities)&lt;/li&gt;&lt;/ul&gt;
+&lt;p&gt;The full cookie looks like this:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-text&quot;&gt;Set-Cookie: __Host-session={ENCRYPTED_VALUE}; SameSite=Strict; Secure; HttpOnly&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;For more details on cookies and security, &lt;a href=&quot;https://developer.mozilla.org/en-US/docs/Web/HTTP/Cookies&quot;&gt;see the MDN documentation&lt;/a&gt;.&lt;/p&gt;
+&lt;h2&gt;Implementation details&lt;/h2&gt;
+&lt;p&gt;Our session cookies are encrypted using &lt;code&gt;AES-GCM-256&lt;/code&gt;. Our keys are represented as &lt;code&gt;base64url&lt;/code&gt; encoded strings with some prefixes which allow us to support upgrading our encryption to a different algoirthm and key length.&lt;/p&gt;
+&lt;p&gt;Our key format is as follows:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-text&quot;&gt;{algorithm}:{key_length}:{base64url_encoded_key}&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Here's an example key:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-text&quot;&gt;AES-GCM:256:avKuo13qK3JgbOJdAyeMkeZBRUOsR4AIj-qKWnlq-RI&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;It has a number of parts:&lt;/p&gt;
+&lt;ul&gt;&lt;li&gt;&lt;code&gt;AES-GCM:&lt;/code&gt; the algorithm used to generate the key&lt;/li&gt;&lt;li&gt;&lt;code&gt;256:&lt;/code&gt; the length used to generate the key&lt;/li&gt;&lt;li&gt;&lt;code&gt;ww8fa...&lt;/code&gt; the key itself, encoded as a &lt;code&gt;base64url&lt;/code&gt; string&lt;/li&gt;&lt;/ul&gt;
+&lt;p&gt;Our session cookies will be of the form:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-text&quot;&gt;{iv}:{encrypted_state}&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Here's an example session cookie:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-text&quot;&gt;S99Z8e_kYnv2tosXDyfQz:7oo-s0K66-A446xttFfoA6nXDskiQVUFNURowRgcsoM&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Which breaks down like so:&lt;/p&gt;
+&lt;ul&gt;&lt;li&gt;&lt;code&gt;S99...:&lt;/code&gt; the &lt;a href=&quot;https://developer.mozilla.org/en-US/docs/Web/API/AesGcmParams#iv&quot;&gt;iv&lt;/a&gt; used during encryption&lt;/li&gt;&lt;li&gt;&lt;code&gt;7oo...&lt;/code&gt; the encrypted session state&lt;/li&gt;&lt;/ul&gt;
+&lt;h2&gt;Missing features: session expiration, revocation, etc&lt;/h2&gt;
+&lt;p&gt;This implementation is missing a number of features that you might consider table-stakes. You should be able to layer such features on top. For example, this implementation does not have a way to revoke all sessions for a specific user, but it can be built fairly easily by:&lt;/p&gt;
+&lt;ul&gt;&lt;li&gt;Adding &lt;code&gt;created_at&lt;/code&gt; to the session state when you create a new session&lt;/li&gt;&lt;li&gt;Storing a &lt;code&gt;sessions_revoked_at&lt;/code&gt; value in your database for each user&lt;/li&gt;&lt;li&gt;Creating a middleware that fetches the current user associated with the session&lt;/li&gt;&lt;li&gt;Nullifying any sessions whose &lt;code&gt;created_at &amp;lt; sessions_revoked_at&lt;/code&gt;&lt;/li&gt;&lt;/ul&gt;
+&lt;p&gt;Another feature we're lacking is automatic session expiration. Most of my users prefer to stay logged in to my apps until they manually opt to logout, so I'm fine with no expiration. It does potentially pose a security risk for very secure applications, however. If your application needs session expiration, it's pretty easy to layer on using the time stamp approach suggested above. You might also use &lt;a href=&quot;https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie&quot;&gt;standard cookie expiration&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;Most other session features that I've ever needed can be similarly layered on top of our simple implementation, so I'll leave such exercises up to the reader.&lt;/p&gt;
+&lt;h2&gt;Source&lt;/h2&gt;
+&lt;p&gt;The source is below. For reference, the &lt;code&gt;lib/middleware&lt;/code&gt; file looks like this:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-ts&quot;&gt;&lt;span class=&quot;hl-keyword&quot;&gt;import&lt;/span&gt; type { Server } &lt;span class=&quot;hl-keyword&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;hl-string&quot;&gt;'bun'&lt;/span&gt;;
+
+&lt;span class=&quot;hl-comment&quot;&gt;// The Bun Serve.fetch handler singnature&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;export&lt;/span&gt; type HTTPHandler = (request: Request, server: Server) =&amp;gt; Response | Promise&amp;lt;Response&amp;gt;;
+
+&lt;span class=&quot;hl-comment&quot;&gt;// The type signature of a middleware function&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;export&lt;/span&gt; type Middleware = (next: HTTPHandler) =&amp;gt; HTTPHandler;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;I wanted to write some tests for some of the internal functions in my session implementation, so I stored the bulk of the logic in &lt;code&gt;lib/sessions/seessions.ts&lt;/code&gt; and wrote my tests against that. I then created an export of the public API in &lt;code&gt;lib/sessions/index.ts&lt;/code&gt; which is detailed at the end of this article.&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-ts&quot;&gt;&lt;span class=&quot;hl-comment&quot;&gt;/**
+ * This implements an encryption-based session cookie. We use AES-GCM-256
+ * which is secure enough for our needs while still being fairly performant.
+ *
+ * This runs around 10K encrypt / decrypt operations in 350ms on my old
+ * laptop, unplugged (low power mode). That's good enough.
+ */&lt;/span&gt;
+
+&lt;span class=&quot;hl-keyword&quot;&gt;import&lt;/span&gt; type { Middleware } &lt;span class=&quot;hl-keyword&quot;&gt;from&lt;/span&gt; 'lib/middleware&lt;span class=&quot;hl-string&quot;&gt;';
+
+/**
+ * This is the type signature of a request that may have a session associated with it.
+ */
+export type SessionRequest&amp;lt;T&amp;gt; = Request &amp;amp; { session?: T };
+
+/**
+ * The type signature of a response that may have a session associated with it.
+ */
+export type SessionResponse&amp;lt;T&amp;gt; = Response &amp;amp; { session?: T };
+
+/**
+ * The arguments used to create the session middleware.
+ */
+type MiddlewareArgs = {
+  keys?: string[];
+};
+
+/**
+ * The start of the session cookie value.
+ */
+const sessionCookiePrefix = '&lt;/span&gt;__Host-session=&lt;span class=&quot;hl-string&quot;&gt;';
+
+/**
+ * If response.session === revokeSymbol, it means the session should be cleared.
+ */
+const revokeSymbol = Symbol();
+
+/**
+ * The webcrypto object, pulled into a const for convenience.
+ * See: https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API
+ */
+const crypto = globalThis.crypto;
+
+/**
+ * The algorithm we'&lt;/span&gt;ll use to encrypt / decrypt session cookies.
+ */
+&lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; algo = { name: &lt;span class=&quot;hl-string&quot;&gt;'AES-GCM'&lt;/span&gt;, length: &lt;span class=&quot;hl-number&quot;&gt;256&lt;/span&gt; };
+
+&lt;span class=&quot;hl-comment&quot;&gt;/**
+ * Convert an item to a base64url-encoded string.
+ */&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; toBase64Url = (arr: any) =&amp;gt; Buffer.&lt;span class=&quot;hl-keyword&quot;&gt;from&lt;/span&gt;(arr).toString(&lt;span class=&quot;hl-string&quot;&gt;'base64url'&lt;/span&gt;);
+
+&lt;span class=&quot;hl-comment&quot;&gt;/**
+ * Converters for converting strings to / from Uint8Array.
+ */&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; textEncoder = &lt;span class=&quot;hl-keyword&quot;&gt;new&lt;/span&gt; TextEncoder();
+&lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; textDecoder = &lt;span class=&quot;hl-keyword&quot;&gt;new&lt;/span&gt; TextDecoder();
+
+&lt;span class=&quot;hl-comment&quot;&gt;/**
+ * Extract the session cookie from a request. Return undefined if
+ * no session cookie is found. This returns the *encrypted* session
+ * cookie. Exported for testing purposes.
+ */&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;export&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;function&lt;/span&gt; extractSessionCookie(req: { headers: Headers }) {
+  &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; cookie = req.headers.get(&lt;span class=&quot;hl-string&quot;&gt;'cookie'&lt;/span&gt;);
+  &lt;span class=&quot;hl-keyword&quot;&gt;if&lt;/span&gt; (!cookie) {
+    &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt;;
+  }
+  &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; extractSession = (start: number) =&amp;gt; {
+    &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; semi = cookie.indexOf(&lt;span class=&quot;hl-string&quot;&gt;';'&lt;/span&gt;, start);
+    &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; cookie.slice(start, semi &amp;lt; &lt;span class=&quot;hl-number&quot;&gt;0&lt;/span&gt; ? cookie.length : semi);
+  };
+  &lt;span class=&quot;hl-keyword&quot;&gt;let&lt;/span&gt; prefix = sessionCookiePrefix;
+  &lt;span class=&quot;hl-keyword&quot;&gt;if&lt;/span&gt; (cookie.startsWith(prefix)) {
+    &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; extractSession(prefix.length);
+  }
+  prefix = &lt;span class=&quot;hl-string&quot;&gt;`; ${prefix}`&lt;/span&gt;;
+  &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; index = cookie.indexOf(prefix);
+  &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; index &amp;lt; &lt;span class=&quot;hl-number&quot;&gt;0&lt;/span&gt; ? &lt;span class=&quot;hl-keyword&quot;&gt;undefined&lt;/span&gt; : extractSession(index + prefix.length);
+}
+
+&lt;span class=&quot;hl-comment&quot;&gt;/**
+ * Parse the serialized encryption keys into CryptoKey instances.
+ */&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;async&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;function&lt;/span&gt; parseKeys(keys?: string[]): Promise&amp;lt;CryptoKey[]&amp;gt; {
+  &lt;span class=&quot;hl-keyword&quot;&gt;if&lt;/span&gt; (!keys?.length) {
+    console.error(
+      [
+        &lt;span class=&quot;hl-string&quot;&gt;`No encryption keys were provided to session middleware.`&lt;/span&gt;,
+        &lt;span class=&quot;hl-string&quot;&gt;`To generate encryption keys, run:`&lt;/span&gt;,
+        &lt;span class=&quot;hl-string&quot;&gt;`bun lib/sessions/genkey.ts`&lt;/span&gt;,
+      ].join(&lt;span class=&quot;hl-string&quot;&gt;'\n'&lt;/span&gt;),
+    );
+    &lt;span class=&quot;hl-keyword&quot;&gt;throw&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;new&lt;/span&gt; Error(&lt;span class=&quot;hl-string&quot;&gt;`session middleware keys not provided`&lt;/span&gt;);
+  }
+  &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; Promise.all(
+    keys.map(&lt;span class=&quot;hl-keyword&quot;&gt;async&lt;/span&gt; (serializedKey) =&amp;gt; {
+      &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; [algoName, algoLength, key64] = serializedKey.split(&lt;span class=&quot;hl-string&quot;&gt;':'&lt;/span&gt;);
+      &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;await&lt;/span&gt; crypto.subtle.importKey(
+        &lt;span class=&quot;hl-string&quot;&gt;'raw'&lt;/span&gt;,
+        Buffer.&lt;span class=&quot;hl-keyword&quot;&gt;from&lt;/span&gt;(key64, &lt;span class=&quot;hl-string&quot;&gt;'base64url'&lt;/span&gt;),
+        {
+          name: algoName,
+          length: parseInt(algoLength, &lt;span class=&quot;hl-number&quot;&gt;10&lt;/span&gt;),
+        },
+        &lt;span class=&quot;hl-keyword&quot;&gt;true&lt;/span&gt;,
+        [&lt;span class=&quot;hl-string&quot;&gt;'encrypt'&lt;/span&gt;, &lt;span class=&quot;hl-string&quot;&gt;'decrypt'&lt;/span&gt;],
+      );
+    }),
+  );
+}
+
+&lt;span class=&quot;hl-comment&quot;&gt;/**
+ * Encrypt the payload, returning &quot;iv:ciphertext&quot; where iv is the base64url
+ * encoded iv value, and ciphertext is the base64url-encoded encrypted payload.
+ */&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;async&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;function&lt;/span&gt; encrypt(key: CryptoKey, data: string) {
+  &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; iv = crypto.getRandomValues(&lt;span class=&quot;hl-keyword&quot;&gt;new&lt;/span&gt; Uint8Array(&lt;span class=&quot;hl-number&quot;&gt;16&lt;/span&gt;));
+  &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; ciphertext: ArrayBuffer = &lt;span class=&quot;hl-keyword&quot;&gt;await&lt;/span&gt; crypto.subtle.encrypt(
+    { name: algo.name, iv },
+    key,
+    textEncoder.encode(data),
+  );
+  &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;hl-string&quot;&gt;`${toBase64Url(iv)}:${toBase64Url(ciphertext)}`&lt;/span&gt;;
+}
+
+&lt;span class=&quot;hl-comment&quot;&gt;/**
+ * Decrypt data, which is expected to be of the form &quot;iv:ciphertext&quot; as
+ * produced by the encrypt function.
+ */&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;async&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;function&lt;/span&gt; decrypt(key: CryptoKey, iv64: string, data64: string) {
+  &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; plaintext = &lt;span class=&quot;hl-keyword&quot;&gt;await&lt;/span&gt; crypto.subtle.decrypt(
+    {
+      name: algo.name,
+      iv: Buffer.&lt;span class=&quot;hl-keyword&quot;&gt;from&lt;/span&gt;(iv64, &lt;span class=&quot;hl-string&quot;&gt;'base64url'&lt;/span&gt;),
+    },
+    key,
+    Buffer.&lt;span class=&quot;hl-keyword&quot;&gt;from&lt;/span&gt;(data64, &lt;span class=&quot;hl-string&quot;&gt;'base64url'&lt;/span&gt;),
+  );
+  &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; textDecoder.decode(plaintext);
+}
+
+&lt;span class=&quot;hl-comment&quot;&gt;/**
+ * Attempt to decrypt and parse the sesion cookie. If succesful, req.session
+ * will be set to the parsed session state. This doesn't throw on error, but
+ * it does log. The reason we avoid throwing is because we're going to get
+ * errors during key rotation.
+ */&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;async&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;function&lt;/span&gt; parseSession(keys: CryptoKey[], req: SessionRequest&amp;lt;unknown&amp;gt;) {
+  &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; encryptedSession = extractSessionCookie(req);
+  &lt;span class=&quot;hl-keyword&quot;&gt;if&lt;/span&gt; (!encryptedSession) {
+    &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt;;
+  }
+  &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; [iv64, data64] = encryptedSession.split(&lt;span class=&quot;hl-string&quot;&gt;':'&lt;/span&gt;, &lt;span class=&quot;hl-number&quot;&gt;4&lt;/span&gt;);
+  &lt;span class=&quot;hl-keyword&quot;&gt;for&lt;/span&gt; (&lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; key &lt;span class=&quot;hl-keyword&quot;&gt;of&lt;/span&gt; keys) {
+    &lt;span class=&quot;hl-keyword&quot;&gt;try&lt;/span&gt; {
+      req.session = JSON.parse(&lt;span class=&quot;hl-keyword&quot;&gt;await&lt;/span&gt; decrypt(key, iv64, data64));
+      &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; key;
+    } &lt;span class=&quot;hl-keyword&quot;&gt;catch&lt;/span&gt; (err: any) {
+      console.error(&lt;span class=&quot;hl-string&quot;&gt;`[session] failed to decrypt or parse`&lt;/span&gt;, err.message);
+    }
+  }
+}
+
+&lt;span class=&quot;hl-comment&quot;&gt;/**
+ * Write the specified value to the session cookie.
+ */&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;async&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;function&lt;/span&gt; writeSessionCookie(res: Response, value: string) {
+  res.headers.append(
+    &lt;span class=&quot;hl-string&quot;&gt;'Set-Cookie'&lt;/span&gt;,
+    &lt;span class=&quot;hl-string&quot;&gt;`${sessionCookiePrefix}${value}; SameSite=Strict; Secure; HttpOnly`&lt;/span&gt;,
+  );
+  &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; res;
+}
+
+&lt;span class=&quot;hl-comment&quot;&gt;/**
+ * Generate a key which can be used for encrypting / decrypting session
+ * cookies. This should be stored in .env or your application config.
+ */&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;export&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;async&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;function&lt;/span&gt; genkey() {
+  &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; key = &lt;span class=&quot;hl-keyword&quot;&gt;await&lt;/span&gt; crypto.subtle.generateKey(algo, &lt;span class=&quot;hl-keyword&quot;&gt;true&lt;/span&gt;, [&lt;span class=&quot;hl-string&quot;&gt;'encrypt'&lt;/span&gt;, &lt;span class=&quot;hl-string&quot;&gt;'decrypt'&lt;/span&gt;]);
+  &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; exported = &lt;span class=&quot;hl-keyword&quot;&gt;await&lt;/span&gt; crypto.subtle.exportKey(&lt;span class=&quot;hl-string&quot;&gt;'raw'&lt;/span&gt;, key);
+  &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; key64 = toBase64Url(exported);
+  &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;hl-string&quot;&gt;`${algo.name}:${algo.length}:${key64}`&lt;/span&gt;;
+}
+
+&lt;span class=&quot;hl-comment&quot;&gt;/**
+ * Terminate the session, clearing the session cookie.
+ */&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;export&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;function&lt;/span&gt; revokeSession(res: Response) {
+  &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; setSession(res, revokeSymbol);
+}
+
+&lt;span class=&quot;hl-comment&quot;&gt;/**
+ * Create or modify the current session.
+ */&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;export&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;function&lt;/span&gt; setSession&amp;lt;T&amp;gt;(res: Response, data: T): SessionResponse&amp;lt;T&amp;gt; {
+  &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; response = res as SessionResponse&amp;lt;T&amp;gt;;
+  response.session = data;
+  &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; response;
+}
+
+&lt;span class=&quot;hl-comment&quot;&gt;/**
+ * Create a middleware function which attaches session state to incoming
+ * requests, and sets / removes the session cookie from outgoing responses.
+ */&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;export&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;async&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;function&lt;/span&gt; makeSessionMiddleware(args?: MiddlewareArgs): Promise&amp;lt;Middleware&amp;gt; {
+  &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; keys = &lt;span class=&quot;hl-keyword&quot;&gt;await&lt;/span&gt; parseKeys(args?.keys || process.env.SESSION_KEYS?.split(&lt;span class=&quot;hl-string&quot;&gt;','&lt;/span&gt;));
+  &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; [key] = keys;
+  &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; (next) =&amp;gt; &lt;span class=&quot;hl-keyword&quot;&gt;async&lt;/span&gt; (req, server) =&amp;gt; {
+    &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; sessionRequest = req as SessionRequest&amp;lt;unknown&amp;gt;;
+    &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; sessionKey = &lt;span class=&quot;hl-keyword&quot;&gt;await&lt;/span&gt; parseSession(keys, sessionRequest);
+    &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; res = (&lt;span class=&quot;hl-keyword&quot;&gt;await&lt;/span&gt; next(sessionRequest, server)) as SessionResponse&amp;lt;unknown&amp;gt;;
+
+    &lt;span class=&quot;hl-comment&quot;&gt;// The session has been revoked; remove the cookie.&lt;/span&gt;
+    &lt;span class=&quot;hl-keyword&quot;&gt;if&lt;/span&gt; (res.session === revokeSymbol) {
+      &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; writeSessionCookie(res, &lt;span class=&quot;hl-string&quot;&gt;'; Expires=0'&lt;/span&gt;);
+    }
+
+    &lt;span class=&quot;hl-comment&quot;&gt;// If data is truthy, we've got a new session value (res.session), or we've&lt;/span&gt;
+    &lt;span class=&quot;hl-comment&quot;&gt;// done a key rotation (sessionKey !== key) so we need to re-write the session.&lt;/span&gt;
+    &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; data = res.session || (sessionKey !== key &amp;amp;&amp;amp; sessionRequest.session);
+    &lt;span class=&quot;hl-keyword&quot;&gt;if&lt;/span&gt; (data) {
+      &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; writeSessionCookie(res, &lt;span class=&quot;hl-keyword&quot;&gt;await&lt;/span&gt; encrypt(key, JSON.stringify(data)));
+    }
+    &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; res;
+  };
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;Public API&lt;/h2&gt;
+&lt;p&gt;Here's the public API, exported from &lt;code&gt;lib/sessions/index.ts&lt;/code&gt;:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-ts&quot;&gt;&lt;span class=&quot;hl-keyword&quot;&gt;export&lt;/span&gt; {
+  type SessionRequest,
+  type SessionResponse,
+  genkey,
+  revokeSession,
+  setSession,
+  makeSessionMiddleware,
+} &lt;span class=&quot;hl-keyword&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;hl-string&quot;&gt;'./sessions'&lt;/span&gt;;&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;Genkey&lt;/h2&gt;
+&lt;p&gt;And lastly, here's &lt;code&gt;lib/sessions/genkey.ts&lt;/code&gt; which can be used to generate new session keys from the command line:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-ts&quot;&gt;&lt;span class=&quot;hl-comment&quot;&gt;/**
+ * A script which generates a new session key and prints out the
+ * SESSION_KEYS environment variable with the new key prefixed.
+ *
+ * bun lib/sessions/genkey.ts
+ */&lt;/span&gt;
+
+&lt;span class=&quot;hl-keyword&quot;&gt;import&lt;/span&gt; { genkey } &lt;span class=&quot;hl-keyword&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;hl-string&quot;&gt;'./sessions'&lt;/span&gt;;
+
+&lt;span class=&quot;hl-comment&quot;&gt;// We'll only keep the previous 2 keys around. If you wish to keep&lt;/span&gt;
+&lt;span class=&quot;hl-comment&quot;&gt;// more around for some reason, you can manually add them back to&lt;/span&gt;
+&lt;span class=&quot;hl-comment&quot;&gt;// your config.&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; keys = (process.env.SESSION_KEYS || '&lt;span class=&quot;hl-string&quot;&gt;')
+  .split('&lt;/span&gt;,&lt;span class=&quot;hl-string&quot;&gt;')
+  .filter((s) =&amp;gt; s)
+  .slice(0, 2);
+
+console.log();
+console.log('&lt;/span&gt;Save the follwing &lt;span class=&quot;hl-keyword&quot;&gt;in&lt;/span&gt; your .env or your application config:&lt;span class=&quot;hl-string&quot;&gt;');
+console.log();
+console.log(`SESSION_KEYS=${[await genkey(), ...keys].join('&lt;/span&gt;,')}`);
+console.log();&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;Conclusion&lt;/h2&gt;
+&lt;p&gt;And that's it; a basic session implementation with no dependencies outside of Bun itself. If you're interested in more Bun DIY articles, subscribe to the &lt;a href=&quot;https://christophilus.com/feed.rss&quot;&gt;rss feed&lt;/a&gt; to get notified when I post new ones.&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>Bun DIY: Serving Static Assets</title>
+      <link>https://christophilus.com/blog/bun-diy-serving-static-assets.html</link>
+      <guid>https://christophilus.com/blog/bun-diy-serving-static-assets.html</guid>
+      <pubDate>Fri, 26 Jul 2024 12:00:00 GMT</pubDate>
+      <description>&lt;h1&gt;Bun DIY: Serving Static Assets&lt;/h1&gt;
+&lt;p&gt;Today, we'll be building a small, zero-dependency HTTP handler for serving static assets using Bun. Serving static assets from Bun is pretty simple, but there are some things to consider:&lt;/p&gt;
+&lt;ul&gt;&lt;li&gt;Properly handling missing files&lt;/li&gt;&lt;li&gt;Protecting against path-exploits (e.g. requests like &lt;code&gt;/assets/../.env&lt;/code&gt; should fail)&lt;/li&gt;&lt;li&gt;Using ETags to avoid unnecessary bandwidth consumption&lt;/li&gt;&lt;/ul&gt;
+&lt;h2&gt;Usage&lt;/h2&gt;
+&lt;p&gt;Call &lt;code&gt;makeStaticAssetHandler&lt;/code&gt;, and pass it the name of the folder whose contents you wish to serve. This returns an HTTP handler &lt;code&gt;(req: Request) =&amp;gt; Promise&amp;lt;Response&amp;gt;&lt;/code&gt; which can be used by &lt;code&gt;Bun.serve&lt;/code&gt; or by a router, as in the following example:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-js&quot;&gt;route.add(&lt;span class=&quot;hl-string&quot;&gt;'get/assets/*path'&lt;/span&gt;, makeStaticAssetHandler(&lt;span class=&quot;hl-string&quot;&gt;'assets'&lt;/span&gt;));&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;Handling missing files&lt;/h2&gt;
+&lt;p&gt;When we get a request for a non-existent path, we want to return a 404. Checking if a file exists is &lt;a href=&quot;https://bun.sh/guides/read-file/exists&quot;&gt;trivial in bun&lt;/a&gt;:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-ts&quot;&gt;&lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; file = Bun.file(fullPath);
+&lt;span class=&quot;hl-keyword&quot;&gt;if&lt;/span&gt; (!(&lt;span class=&quot;hl-keyword&quot;&gt;await&lt;/span&gt; file.exists())) {
+  &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;new&lt;/span&gt; Response(&lt;span class=&quot;hl-string&quot;&gt;'File not found'&lt;/span&gt;, { status: &lt;span class=&quot;hl-number&quot;&gt;404&lt;/span&gt; });
+}&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;Avoiding path exploits&lt;/h2&gt;
+&lt;p&gt;Malicious users might try to request files that are outside of our static asset folders. For example, they might try to read our &lt;code&gt;.env&lt;/code&gt; file by requesting: &lt;code&gt;/assets/../.env&lt;/code&gt;. To mitigate against such requests, we'll use &lt;a href=&quot;https://nodejs.org/api/path.html#pathnormalizepath&quot;&gt;path.normalize&lt;/a&gt;. This function resolves all &lt;code&gt;.&lt;/code&gt; and &lt;code&gt;..&lt;/code&gt; segments. Once that's done, we can check if the resulting path starts with the static asset folder prefix. If not, we'll return an HTTP 403 (Forbidden).&lt;/p&gt;
+&lt;h2&gt;ETags&lt;/h2&gt;
+&lt;p&gt;&lt;a href=&quot;https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/ETag&quot;&gt;ETags&lt;/a&gt; allow clients to check if an asset has changed since it was last requested and only download it if so. It allows us to have the benefits of caching without resorting to old cache-busting hacks.&lt;/p&gt;
+&lt;p&gt;We'll use &lt;a href=&quot;https://bun.sh/docs/api/hashing&quot;&gt;Bun's built-in sha256 hash&lt;/a&gt; support to compute ETags for any assets we serve. We'll toss the result into an in-memory cache to avoid re-computing the hash. Since our project will have a relatively small number of static assets, we won't bother with cache-eviction or anything like that. If you are building an application that will have a large or unknown number of static assets, then you should look into a different caching strategy. For example, you might pre-compute the etags and store them on disk alongside the assets (e.g. &lt;code&gt;foo.png&lt;/code&gt; might have a &lt;code&gt;foo.png.etag&lt;/code&gt; file), or you might use a LRU cache.&lt;/p&gt;
+&lt;h2&gt;Source&lt;/h2&gt;
+&lt;p&gt;Here's the source:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-ts&quot;&gt;&lt;span class=&quot;hl-comment&quot;&gt;/**
+ * This file contains logic for serving static assets out
+ * of a folder. It is meant to be used in conjunction with
+ * a router, rather than as traditional middleware.
+ */&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;import&lt;/span&gt; path &lt;span class=&quot;hl-keyword&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;hl-string&quot;&gt;'node:path'&lt;/span&gt;;
+
+&lt;span class=&quot;hl-comment&quot;&gt;/**
+ * Given a file, compoute its sha256 hash.
+ */&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;async&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;function&lt;/span&gt; computeFileSha256(filename: string) {
+  &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; hasher = &lt;span class=&quot;hl-keyword&quot;&gt;new&lt;/span&gt; Bun.CryptoHasher(&lt;span class=&quot;hl-string&quot;&gt;'sha256'&lt;/span&gt;);
+  &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; file = Bun.file(filename);
+  &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; stream: any = file.stream();
+  &lt;span class=&quot;hl-keyword&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;await&lt;/span&gt; (&lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; chunk &lt;span class=&quot;hl-keyword&quot;&gt;of&lt;/span&gt; stream) {
+    hasher.update(chunk);
+  }
+  &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; hasher.digest(&lt;span class=&quot;hl-string&quot;&gt;'base64'&lt;/span&gt;);
+}
+
+&lt;span class=&quot;hl-comment&quot;&gt;/**
+ * A memoized function which computes the sha256 hash of a file.
+ * In dev-mode, we'll recompute the hash on each request. In
+ * production, we'll cache it.
+ */&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; getEtag = (() =&amp;gt; {
+  &lt;span class=&quot;hl-keyword&quot;&gt;if&lt;/span&gt; (process.env.NODE_ENV === &lt;span class=&quot;hl-string&quot;&gt;'development'&lt;/span&gt;) {
+    &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; computeFileSha256;
+  }
+  &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; cache: Record&amp;lt;string, string&amp;gt; = {};
+  &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;async&lt;/span&gt; (filename: string) =&amp;gt; {
+    &lt;span class=&quot;hl-keyword&quot;&gt;let&lt;/span&gt; hash = cache[filename];
+    &lt;span class=&quot;hl-keyword&quot;&gt;if&lt;/span&gt; (!hash) {
+      hash = &lt;span class=&quot;hl-keyword&quot;&gt;await&lt;/span&gt; computeFileSha256(filename);
+      cache[filename] = hash;
+    }
+    &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; hash;
+  };
+})();
+
+&lt;span class=&quot;hl-comment&quot;&gt;/**
+ * Create a route-handler for serving static assets from a specific
+ * folder. The route should define a &quot;path&quot; parameter, or the endpoint
+ * will not work.
+ *
+ * Usage:
+ *
+ *   route.add('get/assets/*path', makeStaticAssetHandler('dist/img'));
+ *   route.add('get/css/*path', makeStaticAssetHandler('dist/css'));
+ */&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;export&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;function&lt;/span&gt; makeStaticAssetHandler(folderPath: string) {
+  &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;async&lt;/span&gt; (req: Request &amp;amp; { params: Record&amp;lt;string, string&amp;gt; }) =&amp;gt; {
+    &lt;span class=&quot;hl-comment&quot;&gt;// Compute the full path, normalizing out any .. and . segments&lt;/span&gt;
+    &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; fullPath = path.normalize(path.join(folderPath, req.params.path));
+    &lt;span class=&quot;hl-comment&quot;&gt;// We've got an invalid request, possibly someone malicious hunting for files&lt;/span&gt;
+    &lt;span class=&quot;hl-keyword&quot;&gt;if&lt;/span&gt; (!fullPath.startsWith(folderPath)) {
+      &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;new&lt;/span&gt; Response('Invalid asset path&lt;span class=&quot;hl-string&quot;&gt;', { status: 403 });
+    }
+    // Handle the 404 edge-case
+    const file = Bun.file(fullPath);
+    if (!(await file.exists())) {
+      return new Response('&lt;/span&gt;File not found&lt;span class=&quot;hl-string&quot;&gt;', { status: 404 });
+    }
+    // Compute the etag and send a 304 if the client already has the latest
+    const etag = await getEtag(fullPath);
+    if (etag === req.headers.get('&lt;/span&gt;If-None-Match')) {
+      &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;new&lt;/span&gt; Response(&lt;span class=&quot;hl-keyword&quot;&gt;null&lt;/span&gt;, { status: &lt;span class=&quot;hl-number&quot;&gt;304&lt;/span&gt; });
+    }
+    &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;new&lt;/span&gt; Response(file, { headers: { ETag: etag } });
+  };
+}&lt;/code&gt;&lt;/pre&gt;</description>
+    </item>
+    <item>
+      <title>My Full-Time Job Is Reading Hacker News</title>
+      <link>https://christophilus.com/blog/my-full-time-job-is-reading-hacker-news.html</link>
+      <guid>https://christophilus.com/blog/my-full-time-job-is-reading-hacker-news.html</guid>
+      <pubDate>Fri, 19 Jul 2024 12:00:00 GMT</pubDate>
+      <description>&lt;h1&gt;My Full-Time Job Is Reading Hacker News&lt;/h1&gt;
+&lt;p&gt;Apple tells me I average 2.5 hours per day on my phone. If a full time job is 40 hours per week, I'll spend the equivalent of over 4 years per decade in the full-time job of pissing time away on my phone. Ah, the good life!&lt;/p&gt;
+&lt;p&gt;2.5 hours per day amounts to:&lt;/p&gt;
+&lt;ul&gt;&lt;li&gt;17 hours per week&lt;/li&gt;&lt;li&gt;38 days per year&lt;/li&gt;&lt;li&gt;22 work-weeks (of 40 hours) per year&lt;/li&gt;&lt;li&gt;9125 hours per decade.&lt;/li&gt;&lt;li&gt;380 days per decade&lt;/li&gt;&lt;li&gt;228 work-weeks per decade&lt;/li&gt;&lt;li&gt;4.3 work-years per decade&lt;/li&gt;&lt;/ul&gt;
+&lt;p&gt;The little things add up, don't they?&lt;/p&gt;
+&lt;h2&gt;National average&lt;/h2&gt;
+&lt;p&gt;&lt;a href=&quot;https://backlinko.com/screen-time-statistics&quot;&gt;These stats&lt;/a&gt; are encouraging, putting my measly 2.5 hours to shame.&lt;/p&gt;
+&lt;blockquote&gt;&lt;p&gt;Among users aged 8-12 in the US, average entertainment screen time amounted to 5 hours 33 minutes [per day] in 2021.&lt;/p&gt;&lt;/blockquote&gt;
+&lt;p&gt;That's 50 work weeks per year-- a full time job. Everything is fine, here. I'm sure this won't deepen the mental health crisis.&lt;/p&gt;
+&lt;h2&gt;What worked&lt;/h2&gt;
+&lt;p&gt;This got me thinking. Why do I reach for my phone? Maybe 25% of the time, it's for reasonable things-- reading a recipe, talking to a hooman, etc. 75% of the time, it's to escape the mundane. It's that 75% figure that I want to reduce.&lt;/p&gt;
+&lt;h3&gt;Leaving my phone&lt;/h3&gt;
+&lt;p&gt;By far the best thing I did was to leave my phone behind. When it's not in the same room with me, I become acutely aware of my impulses. I find myself reaching for the phantom phone. This produces a jarring &quot;Oh yeah.&quot; moment which I use as a trigger to do something better:&lt;/p&gt;
+&lt;ul&gt;&lt;li&gt;Deep breathing&lt;/li&gt;&lt;li&gt;Jotting down thoughts on a notepad&lt;/li&gt;&lt;li&gt;Picking up a book&lt;/li&gt;&lt;/ul&gt;
+&lt;h3&gt;Books, pen, and paper&lt;/h3&gt;
+&lt;p&gt;I found a few books that I've been meaning to read through, and put them in strategic locations: my nightstand where it replaces my nighttime news reading habit, the bathroom, ya know, and my office. For the same reason, I also added a pen and nice notepad to a few rooms (office, kitchen, nightstand). This has been marginally helpful in reducing screen-time, but has been quite nice in increasing my reading and writing throughput.&lt;/p&gt;
+&lt;h3&gt;Detox weeks&lt;/h3&gt;
+&lt;p&gt;My wife and I did a digital detox week. For that week, our phones become old-school house-phones. They are relegated to a specific spot, and we only check them the way we would have checked an old recording machine back in prehistoric times. This week was &lt;em&gt;excellent&lt;/em&gt;. We've decided to do one a month.&lt;/p&gt;
+&lt;h3&gt;Time-boxing Hacker News&lt;/h3&gt;
+&lt;p&gt;Most of my idle phone time is spent reading Hacker News or the rabbit trails I find there. I love Hacker News. The conversations are high quality. The articles are interesting. It's the best place on the web, and that makes it dangerous if you want to reduce your screen time.&lt;/p&gt;
+&lt;p&gt;I gave myself a Hacker News time budget. One hour per week, on Saturday. I go to &lt;a href=&quot;https://hn.algolia.com/?dateRange=pastWeek&amp;amp;page=0&amp;amp;prefix=false&amp;amp;query=&amp;amp;sort=byPopularity&amp;amp;type=story&quot;&gt;Algolia&lt;/a&gt; and scan the top stories for the week, build up a reading list of anything that seems worth deeper time, and quit.&lt;/p&gt;
+&lt;p&gt;On weeks where I do this, my screen-time goes down significantly.&lt;/p&gt;
+&lt;h2&gt;What didn't work&lt;/h2&gt;
+&lt;p&gt;I tried a few things that didn't work, either.&lt;/p&gt;
+&lt;h3&gt;Grayscale&lt;/h3&gt;
+&lt;p&gt;I converted my phone to grayscale. There's &lt;a href=&quot;https://www.wired.com/story/grayscale-ios-android-smartphone-addiction/&quot;&gt;some evidence&lt;/a&gt; that it curbs phone addiction. It backfired for me. The web is a garish place, and grayscale gives it a minimal, pleasant uniformity.&lt;/p&gt;
+&lt;h3&gt;Do not disturb&lt;/h3&gt;
+&lt;p&gt;I keep my phone in do-not-disturb mode, with emergency pass through for work and other important contacts. Life is much more pleasant in do-not-disturb mode. But, it turns out, communication isn't the thing that draws me to my phone, so this had no impact on my numbers.&lt;/p&gt;
+&lt;h2&gt;Results and takeaways&lt;/h2&gt;
+&lt;p&gt;Writing this article triggered the &lt;a href=&quot;https://en.wikipedia.org/wiki/Frequency_illusion&quot;&gt;frequency illusion&lt;/a&gt;. I've become much more conscious of flipping my phone out to escape the present moment. As a result, I've gotten a heck of a lot more done since my first draft.&lt;/p&gt;
+&lt;p&gt;My personal reform is too nascent for me dispense sage, condescending advice, but I can say that you should run the math on your own phone usage. The results may surprise you and just might be the kick in the pants you needed to get off your ass.&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>Bun: Zero-Dependency Server-Side JSX</title>
+      <link>https://christophilus.com/blog/bun-diy-server-side-jsx.html</link>
+      <guid>https://christophilus.com/blog/bun-diy-server-side-jsx.html</guid>
+      <pubDate>Fri, 12 Jul 2024 12:00:00 GMT</pubDate>
+      <description>&lt;h1&gt;Bun: Zero-Dependency Server-Side JSX&lt;/h1&gt;
+&lt;p&gt;I'm building a little, zero-dependency application with Bun. Bun comes with JSX support out of the box, but it took a bit of digging to get things working with no dependencies.&lt;/p&gt;
+&lt;p&gt;I figured I'd explain the process.&lt;/p&gt;
+&lt;h2&gt;tsconfig&lt;/h2&gt;
+&lt;p&gt;First, we need to tell Bun / TypeScript where our JSX rendering logic lives. We'll put everything in &lt;code&gt;lib/jsx&lt;/code&gt;:&lt;/p&gt;
+&lt;p&gt;Add the following &lt;code&gt;compilerOptions&lt;/code&gt; to &lt;code&gt;tsconfig.json&lt;/code&gt;:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-json&quot;&gt;&lt;span class=&quot;hl-keyword&quot;&gt;&quot;jsx&quot;:&lt;/span&gt; &lt;span class=&quot;hl-string&quot;&gt;&quot;react-jsx&quot;&lt;/span&gt;,
+&lt;span class=&quot;hl-keyword&quot;&gt;&quot;jsxImportSource&quot;:&lt;/span&gt; &lt;span class=&quot;hl-string&quot;&gt;&quot;lib/jsx&quot;&lt;/span&gt;,&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;And modify your &lt;code&gt;paths&lt;/code&gt; to have an entry like this:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-json&quot;&gt;&lt;span class=&quot;hl-keyword&quot;&gt;&quot;lib/*&quot;:&lt;/span&gt; [&lt;span class=&quot;hl-string&quot;&gt;&quot;./lib/*&quot;&lt;/span&gt;]&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;So, with unrelated stuff omitted, your &lt;code&gt;tsconfig.json&lt;/code&gt; should be a superset of this:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-json&quot;&gt;{
+  &lt;span class=&quot;hl-keyword&quot;&gt;&quot;compilerOptions&quot;:&lt;/span&gt; {
+    &lt;span class=&quot;hl-keyword&quot;&gt;&quot;jsx&quot;:&lt;/span&gt; &lt;span class=&quot;hl-string&quot;&gt;&quot;react-jsx&quot;&lt;/span&gt;,
+    &lt;span class=&quot;hl-keyword&quot;&gt;&quot;jsxImportSource&quot;:&lt;/span&gt; &lt;span class=&quot;hl-string&quot;&gt;&quot;lib/jsx&quot;&lt;/span&gt;,
+    &lt;span class=&quot;hl-keyword&quot;&gt;&quot;baseUrl&quot;:&lt;/span&gt; &lt;span class=&quot;hl-string&quot;&gt;&quot;.&quot;&lt;/span&gt;,
+    &lt;span class=&quot;hl-keyword&quot;&gt;&quot;paths&quot;:&lt;/span&gt; {
+      &lt;span class=&quot;hl-keyword&quot;&gt;&quot;lib/*&quot;:&lt;/span&gt; [&lt;span class=&quot;hl-string&quot;&gt;&quot;./lib/*&quot;&lt;/span&gt;]
+    }
+  }
+}&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;lib/jsx&lt;/h2&gt;
+&lt;p&gt;We'll put all of our logic into &lt;code&gt;lib/jsx/index.ts&lt;/code&gt;, so go ahead and create that.&lt;/p&gt;
+&lt;p&gt;Bun and other transpilers expect a few other files which we'll need to create:&lt;/p&gt;
+&lt;ul&gt;&lt;li&gt;&lt;code&gt;lib/jsx/jsx-runtime.ts&lt;/code&gt;&lt;/li&gt;&lt;li&gt;&lt;code&gt;lib/jsx/jsx-dev-runtime.ts&lt;/code&gt;&lt;/li&gt;&lt;/ul&gt;
+&lt;p&gt;And they both look like this:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-js&quot;&gt;&lt;span class=&quot;hl-keyword&quot;&gt;export&lt;/span&gt; * &lt;span class=&quot;hl-keyword&quot;&gt;from&lt;/span&gt; &lt;span class=&quot;hl-string&quot;&gt;'./index'&lt;/span&gt;;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Now, let's write &lt;code&gt;index.ts&lt;/code&gt;:&lt;/p&gt;
+&lt;p&gt;The bulk of the logic will be in our &lt;code&gt;h&lt;/code&gt; function:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-ts&quot;&gt;&lt;span class=&quot;hl-keyword&quot;&gt;export&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;function&lt;/span&gt; h(args) {
+  console.log(args);
+  &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;hl-string&quot;&gt;'TODO...'&lt;/span&gt;;
+}
+
+&lt;span class=&quot;hl-keyword&quot;&gt;export&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; jsxDEV = h;
+&lt;span class=&quot;hl-keyword&quot;&gt;export&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; jsx = h;&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;You can test that by creating &lt;code&gt;test.tsx&lt;/code&gt;:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-tsx&quot;&gt;console.log(&amp;lt;h1&amp;gt;It is now {new Date().toISOString()}&amp;lt;/h1&amp;gt;);&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;If you run that using &lt;code&gt;bun test.tsx&lt;/code&gt;, you'll see the shape of the args passed to the h function.&lt;/p&gt;
+&lt;h2&gt;Escaping user input&lt;/h2&gt;
+&lt;p&gt;Before we jump into the code, there's something worth noting. Bun comes with a handy &lt;code&gt;escapeHTML&lt;/code&gt; function which I use in my JSX rendering logic. If you want to use any templates from the client, you'll want to use your own escape logic. It might look something like this:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-ts&quot;&gt;&lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; chars: Record&amp;lt;string, string&amp;gt; = {
+  [&lt;span class=&quot;hl-string&quot;&gt;`&quot;`&lt;/span&gt;]: &lt;span class=&quot;hl-string&quot;&gt;'&amp;amp;quot;'&lt;/span&gt;,
+  [&lt;span class=&quot;hl-string&quot;&gt;`&amp;amp;`&lt;/span&gt;]: &lt;span class=&quot;hl-string&quot;&gt;'&amp;amp;amp;'&lt;/span&gt;,
+  [&lt;span class=&quot;hl-string&quot;&gt;`'`&lt;/span&gt;]: '&amp;amp;#x27;&lt;span class=&quot;hl-string&quot;&gt;',
+  [`&amp;lt;`]: '&lt;/span&gt;&amp;amp;lt;&lt;span class=&quot;hl-string&quot;&gt;',
+  [`&amp;gt;`]: '&lt;/span&gt;&amp;amp;gt;&lt;span class=&quot;hl-string&quot;&gt;',
+};
+
+const htmlEscapeRegex = /[&quot;&amp;amp;'&lt;/span&gt;&amp;lt;&amp;gt;]/g;
+
+&lt;span class=&quot;hl-keyword&quot;&gt;function&lt;/span&gt; esc(s: string) {
+  &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; s.replaceAll(htmlEscapeRegex, (ch) =&amp;gt; chars[ch]);
+}&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;Source&lt;/h2&gt;
+&lt;p&gt;Here's a look at the final implementation:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-ts&quot;&gt;&lt;span class=&quot;hl-comment&quot;&gt;// Bun / other transpilers expect these to be defined if jsx mode is&lt;/span&gt;
+&lt;span class=&quot;hl-comment&quot;&gt;// react-jsx and jsxImportSource is used.&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;export&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; jsxDEV = h;
+&lt;span class=&quot;hl-keyword&quot;&gt;export&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; jsx = h;
+
+&lt;span class=&quot;hl-comment&quot;&gt;// We'll use this to identify when a child is the result of a nested JSX&lt;/span&gt;
+&lt;span class=&quot;hl-comment&quot;&gt;// expression. In that case, we don't want to escape the resulting HTML.&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; $jsx = Symbol();
+
+&lt;span class=&quot;hl-comment&quot;&gt;// This is what we'll return from our h function. It allows us to get access&lt;/span&gt;
+&lt;span class=&quot;hl-comment&quot;&gt;// to the raw HTML. The $jsx property helps us identify JSX output when&lt;/span&gt;
+&lt;span class=&quot;hl-comment&quot;&gt;// dealing with nested components.&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;export&lt;/span&gt; type JSXResult = {
+  $jsx: Symbol;
+  value: string;
+};
+
+&lt;span class=&quot;hl-comment&quot;&gt;// These are self-closing tags such as &amp;lt;img /&amp;gt; &amp;lt;br /&amp;gt;, and need special&lt;/span&gt;
+&lt;span class=&quot;hl-comment&quot;&gt;// treatment so that we avoid generating something invalid like &amp;lt;img&amp;gt;&amp;lt;/img&amp;gt;.&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; voidElementNames = &lt;span class=&quot;hl-keyword&quot;&gt;new&lt;/span&gt; Set([
+  'area&lt;span class=&quot;hl-string&quot;&gt;',
+  '&lt;/span&gt;base&lt;span class=&quot;hl-string&quot;&gt;',
+  '&lt;/span&gt;br&lt;span class=&quot;hl-string&quot;&gt;',
+  '&lt;/span&gt;col&lt;span class=&quot;hl-string&quot;&gt;',
+  '&lt;/span&gt;embed&lt;span class=&quot;hl-string&quot;&gt;',
+  '&lt;/span&gt;hr&lt;span class=&quot;hl-string&quot;&gt;',
+  '&lt;/span&gt;img&lt;span class=&quot;hl-string&quot;&gt;',
+  '&lt;/span&gt;input&lt;span class=&quot;hl-string&quot;&gt;',
+  '&lt;/span&gt;link&lt;span class=&quot;hl-string&quot;&gt;',
+  '&lt;/span&gt;meta&lt;span class=&quot;hl-string&quot;&gt;',
+  '&lt;/span&gt;source&lt;span class=&quot;hl-string&quot;&gt;',
+  '&lt;/span&gt;track&lt;span class=&quot;hl-string&quot;&gt;',
+  '&lt;/span&gt;wbr&lt;span class=&quot;hl-string&quot;&gt;',
+]);
+
+// Determine if arg is a potentially dangerous href value.
+function isPotentiallyDangerousURL(arg: string) {
+  return (
+    // If the href contains a : (58 is the unicode value for :)
+    (arg.includes('&lt;/span&gt;:&lt;span class=&quot;hl-string&quot;&gt;') || arg.includes('&lt;/span&gt;&amp;amp;#&lt;span class=&quot;hl-number&quot;&gt;58&lt;/span&gt;;&lt;span class=&quot;hl-string&quot;&gt;')) &amp;amp;&amp;amp;
+    // And it doesn'&lt;/span&gt;t start with http:// or https://
+    !fullyQualifiedURLRegex.test(arg)
+  );
+}
+
+&lt;span class=&quot;hl-comment&quot;&gt;// Determine if a value is a JSXResult&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;function&lt;/span&gt; isJSXResult(o: any): o is JSXResult {
+  &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; o?.$jsx === $jsx;
+}
+
+&lt;span class=&quot;hl-comment&quot;&gt;// Convert a child / children to HTML. We may get various shapes of&lt;/span&gt;
+&lt;span class=&quot;hl-comment&quot;&gt;// data as children: strings / literal values / arrays / nested&lt;/span&gt;
+&lt;span class=&quot;hl-comment&quot;&gt;// JSX values, etc.&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;function&lt;/span&gt; stringifyChild(child: any): string {
+  &lt;span class=&quot;hl-keyword&quot;&gt;if&lt;/span&gt; (Array.isArray(child)) {
+    &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; child.map(stringifyChild).join(&lt;span class=&quot;hl-string&quot;&gt;''&lt;/span&gt;);
+  }
+  &lt;span class=&quot;hl-keyword&quot;&gt;if&lt;/span&gt; (&lt;span class=&quot;hl-keyword&quot;&gt;typeof&lt;/span&gt; child === &lt;span class=&quot;hl-string&quot;&gt;'string'&lt;/span&gt;) {
+    &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; Bun.escapeHTML(child);
+  }
+  &lt;span class=&quot;hl-keyword&quot;&gt;if&lt;/span&gt; (isJSXResult(child)) {
+    &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; child.value;
+  }
+  &lt;span class=&quot;hl-keyword&quot;&gt;if&lt;/span&gt; (child != &lt;span class=&quot;hl-keyword&quot;&gt;null&lt;/span&gt; &amp;amp;&amp;amp; child !== &lt;span class=&quot;hl-keyword&quot;&gt;false&lt;/span&gt;) {
+    &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; Bun.escapeHTML(&lt;span class=&quot;hl-string&quot;&gt;`${child}`&lt;/span&gt;);
+  }
+  &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;hl-string&quot;&gt;''&lt;/span&gt;;
+}
+
+&lt;span class=&quot;hl-comment&quot;&gt;// Convert an object to HTML attributes. We'll handle functions specially&lt;/span&gt;
+&lt;span class=&quot;hl-comment&quot;&gt;// so that we can write simple event handlers on the server, and have the&lt;/span&gt;
+&lt;span class=&quot;hl-comment&quot;&gt;// code execute on the client.&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;function&lt;/span&gt; stringifyAttrs(attrs: Record&amp;lt;string, any&amp;gt;) {
+  &lt;span class=&quot;hl-keyword&quot;&gt;let&lt;/span&gt; result = '&lt;span class=&quot;hl-string&quot;&gt;';
+  for (const k in attrs) {
+    let value = attrs[k];
+
+    // We want to specifically handle boolean attributes and treat them
+    // as an add / remove operation. For example:
+    //
+    // &amp;lt;input checked={true} /&amp;gt;  -&amp;gt; &amp;lt;input checked /&amp;gt;
+    // &amp;lt;input checked={false} /&amp;gt; -&amp;gt; &amp;lt;input /&amp;gt;
+    if (typeof value === '&lt;/span&gt;boolean&lt;span class=&quot;hl-string&quot;&gt;') {
+      value &amp;amp;&amp;amp; (result += ` ${k}`);
+      continue;
+    }
+
+    // Convert functions to strings, presumably as an event-handler.
+    // This would take something like this:
+    //
+    //   onClick={(e) =&amp;gt; { document.title = e.target.textContent; }}&amp;gt;
+    //
+    // And convert it to this:
+    //
+    //   onClick=&quot;((e) =&amp;gt; { document.title = e.target.textContent; })(event)&quot;
+    if (typeof value === '&lt;/span&gt;&lt;span class=&quot;hl-keyword&quot;&gt;function&lt;/span&gt;&lt;span class=&quot;hl-string&quot;&gt;' &amp;amp;&amp;amp; k.startsWith('&lt;/span&gt;on&lt;span class=&quot;hl-string&quot;&gt;')) {
+      value = `(${value})(event)`;
+    }
+
+    // It can be handy to embed view HTML as an attribute (e.g. so that client
+    // scripts can then make use of conditional HTML). This allows us to do
+    // something like this:
+    //
+    // data-moon-icon={&amp;lt;svg&amp;gt;...&amp;lt;/svg&amp;gt;}
+    if (isJSXResult(value)) {
+      value = value.value;
+    }
+    // We want to disallow dangerous href values like javascript:alert(&quot;hi&quot;).
+    if (typeof value === '&lt;/span&gt;string&lt;span class=&quot;hl-string&quot;&gt;' &amp;amp;&amp;amp; k === '&lt;/span&gt;href&lt;span class=&quot;hl-string&quot;&gt;' &amp;amp;&amp;amp; isPotentiallyDangerousURL(value)) {
+      // We have a potentially dangerous href value, so we'&lt;/span&gt;ll
+      &lt;span class=&quot;hl-comment&quot;&gt;// make it blank.&lt;/span&gt;
+      value = &lt;span class=&quot;hl-string&quot;&gt;''&lt;/span&gt;;
+    }
+    result += &lt;span class=&quot;hl-string&quot;&gt;` ${k}=&quot;${Bun.escapeHTML(value)}&quot;`&lt;/span&gt;;
+  }
+  &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; result;
+}
+
+&lt;span class=&quot;hl-comment&quot;&gt;// Fragments are how React and friends represent JSX results that contain&lt;/span&gt;
+&lt;span class=&quot;hl-comment&quot;&gt;// multiple leafs without having a wrapper element.&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;export&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;function&lt;/span&gt; Fragment(...args: Array&amp;lt;{ children: any[] }&amp;gt;) {
+  &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; { $jsx, value: args.flatMap((arg) =&amp;gt; stringifyChild(arg.children)).join(&lt;span class=&quot;hl-string&quot;&gt;''&lt;/span&gt;) };
+}
+
+&lt;span class=&quot;hl-comment&quot;&gt;// The first argument is either a tagName or a function. That is, it is either&lt;/span&gt;
+&lt;span class=&quot;hl-comment&quot;&gt;// something like &quot;div&quot; or &quot;h1&quot;, or it is a function which is itself a JSX&lt;/span&gt;
+&lt;span class=&quot;hl-comment&quot;&gt;// component such as:&lt;/span&gt;
+&lt;span class=&quot;hl-comment&quot;&gt;//&lt;/span&gt;
+&lt;span class=&quot;hl-comment&quot;&gt;// const Hello(props) =&amp;gt; &amp;lt;h1&amp;gt;Hello {props.name}&amp;lt;/h1&amp;gt;&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;export&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;function&lt;/span&gt; h(tagOrFn: string | ((props: any) =&amp;gt; any), props: any): JSXResult {
+  &lt;span class=&quot;hl-comment&quot;&gt;// We have a function component&lt;/span&gt;
+  &lt;span class=&quot;hl-keyword&quot;&gt;if&lt;/span&gt; (&lt;span class=&quot;hl-keyword&quot;&gt;typeof&lt;/span&gt; tagOrFn === &lt;span class=&quot;hl-string&quot;&gt;'function'&lt;/span&gt;) {
+    &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; result = tagOrFn(props);
+    &lt;span class=&quot;hl-comment&quot;&gt;// If a functioni component returns anything other than a JSXResult,&lt;/span&gt;
+    &lt;span class=&quot;hl-comment&quot;&gt;// we don't want its output to show up in our final result.&lt;/span&gt;
+    &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; isJSXResult(result) ? result : { $jsx, value: '&lt;span class=&quot;hl-string&quot;&gt;' };
+  }
+
+  // We'&lt;/span&gt;re dealing with a tagName like &lt;span class=&quot;hl-string&quot;&gt;&quot;h1&quot;&lt;/span&gt;, etc
+  &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; { children, dangerouslySetInnerHTML, ...attrs } = props;
+  &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; content = dangerouslySetInnerHTML
+    ? dangerouslySetInnerHTML.__html
+    : stringifyChild(children);
+
+  &lt;span class=&quot;hl-comment&quot;&gt;// We have a self-closing tag&lt;/span&gt;
+  &lt;span class=&quot;hl-keyword&quot;&gt;if&lt;/span&gt; (voidElementNames.has(tagOrFn)) {
+    &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; { $jsx, value: &lt;span class=&quot;hl-string&quot;&gt;`&amp;lt;${tagOrFn}${stringifyAttrs(attrs)} /&amp;gt;`&lt;/span&gt; };
+  }
+  &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; { $jsx, value: &lt;span class=&quot;hl-string&quot;&gt;`&amp;lt;${tagOrFn}${stringifyAttrs(attrs)}&amp;gt;${content}&amp;lt;/${tagOrFn}&amp;gt;`&lt;/span&gt; };
+}
+
+&lt;span class=&quot;hl-comment&quot;&gt;// This helper lets us change the shape of JSXResult without breaking&lt;/span&gt;
+&lt;span class=&quot;hl-comment&quot;&gt;// callers.&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;export&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;function&lt;/span&gt; renderToString(result: JSXResult) {
+  &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; result.value;
+}&lt;/code&gt;&lt;/pre&gt;</description>
+    </item>
+    <item>
+      <title>Bun: DIY Live Reload</title>
+      <link>https://christophilus.com/blog/bun-diy-live-reload.html</link>
+      <guid>https://christophilus.com/blog/bun-diy-live-reload.html</guid>
+      <pubDate>Thu, 04 Jul 2024 12:00:00 GMT</pubDate>
+      <description>&lt;h1&gt;Bun: DIY Live Reload&lt;/h1&gt;
+&lt;p&gt;Live reload lets you see changes instantly in your browser whenever you save any files. It's a must-have if you want to iterate quickly on any browser content. Live reload isn't baked into Bun, but it's fairly easy to wire up.&lt;/p&gt;
+&lt;p&gt;Here's an example of what we'll be building:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-ts&quot;&gt;&lt;span class=&quot;hl-comment&quot;&gt;// Watch the css and dist directories, and refresh all browsers when&lt;/span&gt;
+&lt;span class=&quot;hl-comment&quot;&gt;// any changes are detected. Browsers will also refresh when the server&lt;/span&gt;
+&lt;span class=&quot;hl-comment&quot;&gt;// restarts.&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; liveReload = makeLiveReloadMiddleware({ watchdirs: [&lt;span class=&quot;hl-string&quot;&gt;'css'&lt;/span&gt;, &lt;span class=&quot;hl-string&quot;&gt;'dist'&lt;/span&gt;] });
+
+&lt;span class=&quot;hl-comment&quot;&gt;// Wrap our request handler in the middleware.&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; requestHandler = liveReload(&lt;span class=&quot;hl-keyword&quot;&gt;async&lt;/span&gt; (req) =&amp;gt; {
+  &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;new&lt;/span&gt; Response(someHTML, {
+    headers: {
+      &lt;span class=&quot;hl-string&quot;&gt;'Content-Type'&lt;/span&gt;: &lt;span class=&quot;hl-string&quot;&gt;'text/html'&lt;/span&gt;,
+    },
+  });
+});
+
+&lt;span class=&quot;hl-comment&quot;&gt;// Create the server&lt;/span&gt;
+Bun.serve({ port, fetch: requestHandler });&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;How it works&lt;/h2&gt;
+&lt;ul&gt;&lt;li&gt;Middleware injects a script into all HTML payloads&lt;/li&gt;&lt;li&gt;The script long-polls the server&lt;/li&gt;&lt;li&gt;When the long-poll ends, the script reconnects, then hard-refreshes&lt;/li&gt;&lt;/ul&gt;
+&lt;p&gt;The hackiest part is the way we inject the script into our responses. We detect any HTML responses, read their payload, and replace &lt;code&gt;&amp;lt;/head&amp;gt;&lt;/code&gt; with &lt;code&gt;&amp;lt;script&amp;gt;...&amp;lt;/script&amp;gt;&amp;lt;/head&amp;gt;&lt;/code&gt;. Definitely hacky, and if you have any &lt;em&gt;massive&lt;/em&gt;, streaming HTML endpoints (e.g. that dumps a huge table out, or whatever), you may want to either optimize this implementation, or add the ability to ignore certain problematic endpoints.&lt;/p&gt;
+&lt;h2&gt;Source&lt;/h2&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-ts&quot;&gt;&lt;span class=&quot;hl-comment&quot;&gt;/**
+ * This middleware provides live-reload functionality in dev-environments.
+ * It intercepts any client requests made to a unique URL (endpointPath),
+ * holding those connections open until a file change is detected.
+ *
+ * When we detect a file change, we'll respond to all connected clients,
+ * sending them into refresh mode. They also go into refresh mode when
+ * bun restarts (e.g. if running bun --watch, and making a change to a server
+ * file).
+ *
+ * The hackiest part of this is the way we inject our live-reload script
+ * into the head of all HTML responses.
+ */&lt;/span&gt;
+
+&lt;span class=&quot;hl-keyword&quot;&gt;import&lt;/span&gt; type { Server } &lt;span class=&quot;hl-keyword&quot;&gt;from&lt;/span&gt; 'bun&lt;span class=&quot;hl-string&quot;&gt;';
+import path from '&lt;/span&gt;node:path&lt;span class=&quot;hl-string&quot;&gt;';
+import { watch } from '&lt;/span&gt;fs&lt;span class=&quot;hl-string&quot;&gt;';
+
+// The Bun Serve.fetch handler singnature
+type HTTPHandler = (request: Request, server: Server) =&amp;gt; Response | Promise&amp;lt;Response&amp;gt;;
+
+// The type signature of a middleware function
+type Middleware = (next: HTTPHandler) =&amp;gt; HTTPHandler;
+
+/**
+ * If running in dev-mode, watch the watchdirs folders for changes, and notify clients.
+ */
+export function makeLiveReloadMiddleware(opts: { watchdirs: string[] }): Middleware {
+  // In non-dev environments, this middleware is a noop
+  if (process.env.NODE_ENV !== '&lt;/span&gt;development&lt;span class=&quot;hl-string&quot;&gt;') {
+    return (next) =&amp;gt; next;
+  }
+
+  // An async function which will notify long-poll request handlers of file changes
+  const waitForFileChange = makeFileWaiter(opts.watchdirs);
+
+  // The endpoint for long-poll requests
+  const endpointPath = '&lt;/span&gt;/livereload-0e4e2dfb-646b-&lt;span class=&quot;hl-number&quot;&gt;4608&lt;/span&gt;-&lt;span class=&quot;hl-number&quot;&gt;9943&lt;/span&gt;-ad3cad795856&lt;span class=&quot;hl-string&quot;&gt;';
+
+  // The script we'&lt;/span&gt;ll inject to perform the long-poll &lt;span class=&quot;hl-keyword&quot;&gt;from&lt;/span&gt; the browser
+  &lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; liveReloadScript = &lt;span class=&quot;hl-string&quot;&gt;`&amp;lt;script&amp;gt;(${clientScript.toString()}(&quot;${endpointPath}&quot;));&amp;lt;/script&amp;gt;`&lt;/span&gt;;
+
+  console.log(&lt;span class=&quot;hl-string&quot;&gt;`[livereload] watching ${opts.watchdirs} for changes`&lt;/span&gt;);
+
+  &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;function&lt;/span&gt; liveReloadMiddleware(next) {
+    &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;async&lt;/span&gt; (req, server) =&amp;gt; {
+      &lt;span class=&quot;hl-comment&quot;&gt;// If our long-poll endpoint is being requested, we'll wait for a file&lt;/span&gt;
+      &lt;span class=&quot;hl-comment&quot;&gt;// change, then we'll notify the client.&lt;/span&gt;
+      &lt;span class=&quot;hl-keyword&quot;&gt;if&lt;/span&gt; (req.url.endsWith(endpointPath)) {
+        &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;new&lt;/span&gt; Response(&lt;span class=&quot;hl-keyword&quot;&gt;await&lt;/span&gt; waitForFileChange(), {
+          headers: { &lt;span class=&quot;hl-string&quot;&gt;'Content-Type'&lt;/span&gt;: &lt;span class=&quot;hl-string&quot;&gt;'text/plain'&lt;/span&gt; },
+        });
+      }
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;  // If it's not an HTML response, we'll just pass it along&lt;br&gt;  const result = await next(req, server);&lt;br&gt;  if (!result.headers.get('Content-Type')?.startsWith('text/html')) {&lt;br&gt;    return result;&lt;br&gt;  }&lt;/p&gt;
+&lt;p&gt;  // We have an HTML response, so we'll inject our live reload script&lt;br&gt;  const body = await result.text();&lt;br&gt;  return new Response(body.replace('&amp;lt;/head&amp;gt;', &lt;code&gt;${liveReloadScript}&amp;lt;/head&amp;gt;&lt;/code&gt;), {&lt;br&gt;    headers: result.headers,&lt;br&gt;  });&lt;br&gt;};&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-text&quot;&gt;  };
+}
+
+/**
+ * This is the client-side function. We'll stringify this and inject
+ * it into any HTML payload that has a `&amp;lt;/head&amp;gt;` tag.
+ */
+async function clientScript(endpointPath: string) {
+  // Detect when the user is navigating away, in which case we don't
+  // want to interfere by refreshing.
+  let navigating = false;
+  window.addEventListener('beforeunload', () =&amp;gt; {
+    navigating = true;
+  });
+
+  // Show a little &quot;Reconnecting...&quot; message when we've lost
+  // the server connection.
+  function showStatus() {
+    const el = document.createElement('div');
+    el.innerHTML = `
+      &amp;lt;div style=&quot;position: fixed; top: 0; left: 0; z-index: 10000; background: #800; padding: 2px 4px; text: white&quot;&amp;gt;
+        Reconnecting...
+      &amp;lt;/div&amp;gt;
+    `;
+    document.body.append(el);
+  }
+
+  // Re-attempt the connection in a loop after which, refresh
+  async function reconnect() {
+    if (navigating) {
+      return;
+    }
+    showStatus();
+    let backoff = 10;
+    for (let i = 0; i &amp;lt; 1000; ++i) {
+      try {
+        await fetch('/');
+        break;
+      } catch {
+        await new Promise((r) =&amp;gt; setTimeout(r, backoff));
+        backoff = Math.min(backoff * 1.05, 500);
+      }
+    }
+    !navigating &amp;amp;&amp;amp; location.reload();
+  }
+
+  // Hit the middlware endpoint and wait for either a response or
+  // a disconnect, sending us into the reconnect / refresh phase.
+  fetch(endpointPath)
+    .then((x) =&amp;gt; x.text())
+    .then(reconnect, reconnect);
+}
+
+// Make a function which can be used to wait for file changes in any
+// of the specified directories.
+function makeFileWaiter(watchdirs: string[]) {
+  let reloadResolve: (s: string) =&amp;gt; void;
+  let reloadPromise: Promise&amp;lt;string&amp;gt;;
+
+  const resetPromise = () =&amp;gt; {
+    reloadPromise = new Promise((resolve) =&amp;gt; {
+      reloadResolve = resolve;
+    });
+  };
+  resetPromise();
+
+  watchdirs.forEach((dir) =&amp;gt; {
+    watch(path.join(process.cwd(), dir), { recursive: true }, (_event, filename) =&amp;gt; {
+      const resolve = reloadResolve;
+      resetPromise();
+      resolve(filename || 'filechange');
+    });
+  });
+
+  return () =&amp;gt; reloadPromise;
+}&lt;/code&gt;&lt;/pre&gt;</description>
+    </item>
+    <item>
+      <title>Running A Bun Service On A Cheap VPS</title>
+      <link>https://christophilus.com/blog/bun-on-a-cheap-vps.html</link>
+      <guid>https://christophilus.com/blog/bun-on-a-cheap-vps.html</guid>
+      <pubDate>Thu, 04 Jul 2024 12:00:00 GMT</pubDate>
+      <description>&lt;h1&gt;Running A Bun Service On A Cheap VPS&lt;/h1&gt;
+&lt;p&gt;Today, I spun up a Bun service on a Hetzner VPS. It was pretty straightforward, but I thought I'd share my notes.&lt;/p&gt;
+&lt;h2&gt;Config&lt;/h2&gt;
+&lt;p&gt;Spinning up a new VPS on Hetzner was simple. I took &lt;a href=&quot;https://community.hetzner.com/tutorials/basic-cloud-config&quot;&gt;Hetzner's example config&lt;/a&gt; and tweaked it to include automatic updates:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-yaml&quot;&gt;#cloud-config
+users:
+  - name: {YOUR_USER_NAME}
+    groups: users, admin
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - {YOUR_PUBLIC_SSH_KEY}
+packages:
+  - fail2ban
+  - ufw
+  - unattended-upgrades
+  - apt-listchanges
+package_update: true
+package_upgrade: true
+runcmd:
+  - printf &quot;[sshd]\nenabled = true\nbanaction = iptables-multiport&quot; &amp;gt; /etc/fail2ban/jail.local
+  - systemctl enable fail2ban
+  - ufw allow ssh
+  - ufw allow http
+  - ufw allow https
+  - ufw enable
+  - sed -i -e '/^\(#\|\)PermitRootLogin/s/^.*$/PermitRootLogin no/' /etc/ssh/sshd_config
+  - sed -i -e '/^\(#\|\)PasswordAuthentication/s/^.*$/PasswordAuthentication no/' /etc/ssh/sshd_config
+  - sed -i -e '/^\(#\|\)KbdInteractiveAuthentication/s/^.*$/KbdInteractiveAuthentication no/' /etc/ssh/sshd_config
+  - sed -i -e '/^\(#\|\)ChallengeResponseAuthentication/s/^.*$/ChallengeResponseAuthentication no/' /etc/ssh/sshd_config
+  - sed -i -e '/^\(#\|\)MaxAuthTries/s/^.*$/MaxAuthTries 2/' /etc/ssh/sshd_config
+  - sed -i -e '/^\(#\|\)AllowTcpForwarding/s/^.*$/AllowTcpForwarding no/' /etc/ssh/sshd_config
+  - sed -i -e '/^\(#\|\)X11Forwarding/s/^.*$/X11Forwarding no/' /etc/ssh/sshd_config
+  - sed -i -e '/^\(#\|\)AllowAgentForwarding/s/^.*$/AllowAgentForwarding no/' /etc/ssh/sshd_config
+  - sed -i -e '/^\(#\|\)AuthorizedKeysFile/s/^.*$/AuthorizedKeysFile .ssh\/authorized_keys/' /etc/ssh/sshd_config
+  - sed -i '$a AllowUsers {YOUR_USER_NAME}' /etc/ssh/sshd_config
+  - systemctl enable unattended-upgrades
+  - reboot&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;Verifying the SSH signature&lt;/h2&gt;
+&lt;p&gt;My VPS was ready in a few seconds. (It was ready so fast, I thought maybe something hadn't worked.) When I first SSHed into the box, I was given a message like this:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-text&quot;&gt;The authenticity of host '...' can't be established.
+ED25519 key fingerprint is SHA256:....&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;To verify the key, I ran:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-bash&quot;&gt;ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;Installing Caddy&lt;/h2&gt;
+&lt;p&gt;Once in, it was time to &lt;a href=&quot;https://caddyserver.com/docs/install#debian-ubuntu-raspbian&quot;&gt;install Caddy&lt;/a&gt;:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-bash&quot;&gt;&lt;span class=&quot;hl-keyword&quot;&gt;sudo&lt;/span&gt; apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
+curl -1sLf &lt;span class=&quot;hl-string&quot;&gt;'https://dl.cloudsmith.io/public/caddy/stable/gpg.key'&lt;/span&gt; | &lt;span class=&quot;hl-keyword&quot;&gt;sudo&lt;/span&gt; gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf &lt;span class=&quot;hl-string&quot;&gt;'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt'&lt;/span&gt; | &lt;span class=&quot;hl-keyword&quot;&gt;sudo&lt;/span&gt; tee /etc/apt/sources.list.d/caddy-stable.list
+&lt;span class=&quot;hl-keyword&quot;&gt;sudo&lt;/span&gt; apt update
+&lt;span class=&quot;hl-keyword&quot;&gt;sudo&lt;/span&gt; apt install caddy&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;I hit &lt;code&gt;https://{IP_ADDRESS}&lt;/code&gt; and saw a default Caddy page. Nice! It told me to do the following:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-text&quot;&gt;Point your domain's A/AAAA DNS records at this machine.
+Upload your site's files to /var/www/html.
+Edit your Caddyfile at /etc/caddy/Caddyfile:
+    Replace :80 with your domain name
+    Change the site root to /var/www/html
+Reload the configuration: systemctl reload caddy
+Visit your site!&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;I love the way Caddy presented that. This is the way dev-tooling should be. Anyway, I'm ignoring all of that advice, since I'm going to instead proxy a Bun service.&lt;/p&gt;
+&lt;h2&gt;Hello, Bun!&lt;/h2&gt;
+&lt;p&gt;I pointed a test domain at my IP address, &lt;a href=&quot;https://bun.sh/docs/installation&quot;&gt;installed Bun&lt;/a&gt;, then created a little hello-world script:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-ts&quot;&gt;&lt;span class=&quot;hl-comment&quot;&gt;// /home/{YOUR_USER_NAME}/hello-world/hi.ts&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;const&lt;/span&gt; port = &lt;span class=&quot;hl-number&quot;&gt;3000&lt;/span&gt;;
+
+Bun.serve({
+  fetch(req) {
+    &lt;span class=&quot;hl-keyword&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;hl-keyword&quot;&gt;new&lt;/span&gt; Response(&lt;span class=&quot;hl-string&quot;&gt;&quot;Hello, world!&quot;&lt;/span&gt;);
+  },
+});
+
+console.log(&lt;span class=&quot;hl-string&quot;&gt;'Listening on'&lt;/span&gt;, port);&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Next, I ran my server manually:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-bash&quot;&gt;bun hi.ts&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;And, I modified &lt;code&gt;/etc/caddy/Caddyfile&lt;/code&gt; to look like this:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-text&quot;&gt;{DOMAIN_NAME} {
+  reverse_proxy :3000
+}&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Hey, presto! Everything worked. I can now see &lt;code&gt;Hello, world!&lt;/code&gt; over HTTPS from any browser on the planet. Neato.&lt;/p&gt;
+&lt;h2&gt;Systemd&lt;/h2&gt;
+&lt;p&gt;I want my Bun service to run automatically when the server restarts, or after a crash. To do that, I &lt;a href=&quot;https://bun.sh/guides/ecosystem/systemd&quot;&gt;created a systemd service&lt;/a&gt; like so:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-bash&quot;&gt;&lt;span class=&quot;hl-comment&quot;&gt;# /etc/systemd/system/hello-world.service&lt;/span&gt;
+[Unit]
+Description=Hello world web service
+After=network.target
+
+[Service]
+Type=simple
+User={YOUR_USER_NAME}
+WorkingDirectory=/home/{YOUR_USER_NAME}/hello-world
+ExecStart=/home/{YOUR_USER_NAME}/.bun/bin/bun run hi.ts
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;I enabled and started it:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-bash&quot;&gt;&lt;span class=&quot;hl-keyword&quot;&gt;sudo&lt;/span&gt; systemctl enable hello-world
+&lt;span class=&quot;hl-keyword&quot;&gt;sudo&lt;/span&gt; systemctl start hello-world&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;Checking the status of everything&lt;/h2&gt;
+&lt;p&gt;Lastly, I created a cheatsheet of the stuff I might want to hop in and check later:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-bash&quot;&gt;&lt;span class=&quot;hl-comment&quot;&gt;# Review statuses, logs, etc&lt;/span&gt;
+&lt;span class=&quot;hl-comment&quot;&gt;# View unattended-upgrades logs here:&lt;/span&gt;
+&lt;span class=&quot;hl-comment&quot;&gt;#&lt;/span&gt;
+&lt;span class=&quot;hl-comment&quot;&gt;#   /var/log/unattended-upgrades/&lt;/span&gt;
+&lt;span class=&quot;hl-comment&quot;&gt;#&lt;/span&gt;
+&lt;span class=&quot;hl-keyword&quot;&gt;sudo&lt;/span&gt; unattended-upgrades --dry-run --debug
+&lt;span class=&quot;hl-keyword&quot;&gt;sudo&lt;/span&gt; fail2ban-client status ssh
+&lt;span class=&quot;hl-keyword&quot;&gt;sudo&lt;/span&gt; ufw status
+&lt;span class=&quot;hl-keyword&quot;&gt;sudo&lt;/span&gt; systemctl status hello-world
+&lt;span class=&quot;hl-keyword&quot;&gt;sudo&lt;/span&gt; systemctl status caddy
+&lt;span class=&quot;hl-keyword&quot;&gt;sudo&lt;/span&gt; journalctl -u caddy -f&lt;/code&gt;&lt;/pre&gt;
+&lt;h2&gt;That's all, folks&lt;/h2&gt;
+&lt;p&gt;And that's it. A working Bun service running on a cheap Hetzner VPS, served over https.&lt;/p&gt;
+&lt;p&gt;Happy hacking.&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>Project structure</title>
+      <link>https://christophilus.com/blog/project-structure.html</link>
+      <guid>https://christophilus.com/blog/project-structure.html</guid>
+      <pubDate>Fri, 28 Jun 2024 12:00:00 GMT</pubDate>
+      <description>&lt;h1&gt;Project structure&lt;/h1&gt;
+&lt;p&gt;Occasionally on Hacker News, someone asks for codebases that demonstrate excellence. A few consistently top the list:&lt;/p&gt;
+&lt;ul&gt;&lt;li&gt;&lt;a href=&quot;https://www.sqlite.org/&quot;&gt;SQLite&lt;/a&gt;&lt;/li&gt;&lt;li&gt;&lt;a href=&quot;https://redict.io/&quot;&gt;Redict&lt;/a&gt;&lt;/li&gt;&lt;li&gt;&lt;a href=&quot;https://www.openbsd.org/&quot;&gt;OpenBSD&lt;/a&gt; (and other BSDs)&lt;/li&gt;&lt;li&gt;&lt;a href=&quot;https://www.postgresql.org/&quot;&gt;Postgres&lt;/a&gt;&lt;/li&gt;&lt;li&gt;&lt;a href=&quot;https://go.dev/&quot;&gt;Go&lt;/a&gt;&lt;/li&gt;&lt;/ul&gt;
+&lt;p&gt;I thought I'd do a quick analysis on these to see if there were any patterns.&lt;/p&gt;
+&lt;h2&gt;The problem space&lt;/h2&gt;
+&lt;p&gt;First, all but OpenBSD are developer tools. They all deal with well-understood inputs and outputs. Unlike most of my projects, these don't have to deal with vague business requirements, subjective UI decisions, or fad-churn. I'm not sure how much these projects can inform my typical project, but it's worth a look.&lt;/p&gt;
+&lt;h2&gt;Structure&lt;/h2&gt;
+&lt;p&gt;I pulled these (and a few other projects) down and ran an analysis of their directory structures:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;lang-gen:table&quot;&gt;Project                 Avg depth     # Directories   # Files     # Files / Dir
+
+SQLite                  2.7           80              2308        28.9
+Busybox                 2.3           183             3011        16.5
+Redict                  3.0           106             1724        16.5
+OpenBSD (without Gnu)   3.8           3031            47495       15.7
+OpenBSD                 5.4           7245            99726       13.8
+Postgres                3.6           634             7619        12.0
+React                   3.8           553             7061        12.7
+Node                    5.6           4034            47649       11.8
+Go                      4.6           1485            14740       9.9
+Vue (Core)              3.1           111             804         7.2&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;I have a bias for flat project structures, and this little experiment mostly reinforced that. I find it easier to get a quick sense of a project that has less nesting. More folders means more naming, and naming is hard. More folders means more choice. More choice means more decision-fatigue and opportunity for bikeshedding. When I add a new file, if the project structure is flat, it's trivial to answer, &quot;Where does this belong?&quot;.&lt;/p&gt;
+&lt;p&gt;There's no right or wrong here; just preference. But those are some of my reasons for preferring flat projects. I'm in decent company.&lt;/p&gt;
+&lt;h2&gt;Long functions&lt;/h2&gt;
+&lt;p&gt;I noticed that none of these projects shies away from long files and functions. For example, &lt;a href=&quot;https://github.com/golang/go/blob/master/src/time/format.go&quot;&gt;time/format.go&lt;/a&gt; has a 380 line function in it. There's much to be said for code-locality and code-linearity-- the ability to read top-down and be done, rather than having to jump all over various functions, files, and directories to follow the thread of logic.&lt;/p&gt;
+&lt;h2&gt;Simple languages&lt;/h2&gt;
+&lt;p&gt;The commonly recommended projects are all C or Go-- two low-abstraction languages with plenty of footguns and detractors. This is probably not coincidental. My suspicion (anecdotally informed by my own history with C and Go) is that their rudimentary nature forces the programmer to plan ahead.&lt;/p&gt;
+&lt;p&gt;I vaguely remember a study that found that test takers performed better when the test was difficult to read (due to fuzzy fonts, printing glitches, etc). A similar effect was found for listening-comprehension. People remembered more when they had to strain to understand the speaker. The idea was that added difficulty kicked the brain into a higher-gear, and that had spillover effects. I wonder if a similar effect happens with programming languages. There's no doubt that expressivity of a language influences the kinds of thoughts the speakers have. In this case, is it possible that the lack of expressivity is a constraint that forces the brain into a higher-gear, leading to better outcomes?&lt;/p&gt;
+&lt;p&gt;When I write in a high-level language like TypeScript, it's easy to just jump right in and get cranking. I can quickly toss an idea together with no forethought. When I write Go, I have to think first. It's a pain to do something like map / filter / reduce, so I have to think more about my data structures and the operations I'll take on them. I usually end up with a program that does less. My typical Go program creates far fewer copies than the equivalent TypeScript code, and it usually has fewer features and edge-cases because I eliminate them out of laziness.&lt;/p&gt;
+&lt;p&gt;Languages which make over-abstraction painful probably tend to be more readable in the long-run. I'd bet that the average Go codebase is more approachable than-- for example-- the average Scala codebase. You're far less likely to run into an architecture astronaut in Go than you are in TypeScript or Scala.&lt;/p&gt;
+&lt;p&gt;All of that said, there are plenty of terrible, messy C and Go codebases, so maybe there's nothing to this...&lt;/p&gt;
+&lt;h2&gt;Comments&lt;/h2&gt;
+&lt;p&gt;SQLite, Redict, and Go are well commented. In some cases, reading through &lt;a href=&quot;https://www.sqlite.org/src/file?name=src/resolve.c&amp;amp;ci=trunk&quot;&gt;a random file&lt;/a&gt; almost feels like you're reading a textbook on the related subject. Contrasting this with my nasty, under-commented code makes me feel like a slob. I'd guess that the practice of thorough commenting leads to more thorough thought and more robust implementations. It's another spillover effect.&lt;/p&gt;
+&lt;h2&gt;Just say no&lt;/h2&gt;
+&lt;p&gt;The top codebases here are clearly run by folks who can say no. They say no to feature creep. They say no to over-abstraction. They know their core problem. If it falls outside of that core, it doesn't make the cut.&lt;/p&gt;
+&lt;p&gt;For example, let's take a look at &lt;code&gt;cat&lt;/code&gt;:&lt;/p&gt;
+&lt;ul&gt;&lt;li&gt;&lt;a href=&quot;https://github.com/mirror/busybox/blob/master/coreutils/cat.c&quot;&gt;busybox&lt;/a&gt;&lt;/li&gt;&lt;li&gt;&lt;a href=&quot;https://github.com/openbsd/src/blob/master/bin/cat/cat.c&quot;&gt;OpenBSD&lt;/a&gt;&lt;/li&gt;&lt;li&gt;&lt;a href=&quot;https://github.com/coreutils/coreutils/blob/master/src/cat.c&quot;&gt;GNU coreutils&lt;/a&gt;&lt;/li&gt;&lt;/ul&gt;
+&lt;p&gt;I don't mean to throw shade on the GNU coreutils contributors. I use their stuff daily and am grateful to everyone involved! The busybox and OpenBSD projects have said &quot;no&quot; a lot more often than the coreutils projects have. I know which version I'd prefer to maintain!&lt;/p&gt;
+&lt;h2&gt;Surprises&lt;/h2&gt;
+&lt;p&gt;A few surprises, taken at random:&lt;/p&gt;
+&lt;p&gt;I was surprised to find that OpenBSD's source is sparsely commented.&lt;/p&gt;
+&lt;p&gt;The headline of the OpenBSD &lt;code&gt;src/gnu&lt;/code&gt; readme made me chuckle:&lt;/p&gt;
+&lt;blockquote&gt;&lt;p&gt;This directory contains software that is Gigantic and Nasty but Unavoidable.&lt;/p&gt;&lt;/blockquote&gt;
+&lt;p&gt;Busybox is nice. Really nice. It has clean, simple, and well-commented code organized in a shallow, flat folder structure. It should make the list the next time this topic comes up on HN.&lt;/p&gt;
+&lt;p&gt;Go was much more nested than I expected, and it is a counter example to my &lt;code&gt;flat=simple&lt;/code&gt; formula. Go's source is nice though-- consistently formatted (thanks, &lt;code&gt;gofmt&lt;/code&gt;!), well-commented, mostly straightforward.&lt;/p&gt;
+&lt;h2&gt;Conclusion&lt;/h2&gt;
+&lt;p&gt;If you made it this far, you'll realize this isn't a scientific analysis at all, but mostly fluff and me reinforcing my priors. I did change my mind about commenting, though. I usually see comments as an antipattern (and they often are). &quot;Focus on making your code readable rather than leaning on the crutch of commenting,&quot; I'd say. But the best of these projects have code that is both readable &lt;em&gt;and&lt;/em&gt; well commented. The comments are thoughtful and comforting, and make me more confident that I can hop in and make changes without missing some critical detail.&lt;/p&gt;
+&lt;p&gt;TL;DR;&lt;/p&gt;
+&lt;p&gt;There's no earth-shattering new insight here. The takeaways are uncontroversial, standard advice:&lt;/p&gt;
+&lt;ul&gt;&lt;li&gt;Flat project structure is nice-- try it&lt;/li&gt;&lt;li&gt;Code locality and linearity are underrated&lt;/li&gt;&lt;li&gt;Language constraints (and possibly, artificially imposed initial constraints) may help produce simpler, better solutions&lt;/li&gt;&lt;li&gt;It's worth honing good writing / commenting skills&lt;/li&gt;&lt;li&gt;Feature-creep is bad, mkay? Say no.&lt;/li&gt;&lt;/ul&gt;</description>
+    </item>
+  </channel>
+</rss>

@@ -13,6 +13,7 @@
     <a href="../" class="current">Blog</a>
     <a href="../games/">Games</a>
     <a href="../about/">About Me</a>
+    <a href="../feed.xml" class="rss" title="RSS Feed"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="6.18" cy="17.82" r="2.18"/><path d="M4 4.44v2.83c7.03 0 12.73 5.7 12.73 12.73h2.83c0-8.59-6.97-15.56-15.56-15.56zm0 5.66v2.83c3.9 0 7.07 3.17 7.07 7.07h2.83c0-5.47-4.43-9.9-9.9-9.9z"/></svg></a>
   </nav>
   <article>
     <header>
@@ -113,7 +114,7 @@ type ReturnType = {
 <ul><li>We should probably use a window function or something like that to efficiently collect the items per date.</li><li>We need to ensure we use the passed timezone so we group the items into the proper date (e.g. an item might be Tuesday in UTC, but Wednesday in the caller's timezone)</li><li>Ensure the results all belong to the current organization, and that the caller is at least an active, valid admin in that organization</li></ul>
   </article>
   <footer class="post-nav">
-    <span></span>
+    <a href="./preventing-the-collapse-of-civilization.html">&larr; Preventing the Collapse of Civilization</a>
     <a href="./where-do-we-go-from-here.html">Where do we go from here? &rarr;</a>
   </footer>
 </body>
