@@ -66,6 +66,12 @@ html {
   color: var(--text);
 }
 
+.site-nav a.rss {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+}
+
 main,
 article,
 footer.post-nav {

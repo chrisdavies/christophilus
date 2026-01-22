@@ -20,6 +20,7 @@ function siteNav(currentPage: "blog" | "games" | "about", basePath: string): str
     <a href="${basePath}"${blogClass}>Blog</a>
     <a href="${basePath}games/"${gamesClass}>Games</a>
     <a href="${basePath}about/"${aboutClass}>About Me</a>
+    <a href="${basePath}feed.xml" class="rss" title="RSS Feed"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="6.18" cy="17.82" r="2.18"/><path d="M4 4.44v2.83c7.03 0 12.73 5.7 12.73 12.73h2.83c0-8.59-6.97-15.56-15.56-15.56zm0 5.66v2.83c3.9 0 7.07 3.17 7.07 7.07h2.83c0-5.47-4.43-9.9-9.9-9.9z"/></svg></a>
   </nav>`;
 }
 
@@ -150,6 +151,41 @@ function formatDate(date: string): string {
   return `${months[parseInt(month) - 1]} ${parseInt(day)}, ${year}`;
 }
 
+function formatRssDate(date: string): string {
+  const d = new Date(date + "T12:00:00Z");
+  return d.toUTCString();
+}
+
+function escapeXml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function rssTemplate(posts: { title: string; date: string; slug: string; html: string }[]): string {
+  const items = posts.slice(0, 20).map((p) => `    <item>
+      <title>${escapeXml(p.title)}</title>
+      <link>https://christophilus.com/blog/${p.slug}.html</link>
+      <guid>https://christophilus.com/blog/${p.slug}.html</guid>
+      <pubDate>${formatRssDate(p.date)}</pubDate>
+      <description>${escapeXml(p.html)}</description>
+    </item>`).join("\n");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Christophilus</title>
+    <link>https://christophilus.com</link>
+    <description>Blog by Chris Davies</description>
+    <language>en-us</language>
+    <atom:link href="https://christophilus.com/feed.xml" rel="self" type="application/rss+xml"/>
+${items}
+  </channel>
+</rss>`;
+}
+
 console.log("Building site to dist/...\n");
 
 // Create dist directories
@@ -238,6 +274,10 @@ await writeFile(`${DIST}/games/index.html`, gamesHtml);
 // Generate about page
 const aboutHtml = aboutTemplate();
 await writeFile(`${DIST}/about/index.html`, aboutHtml);
+
+// Generate RSS feed
+const rssXml = rssTemplate(posts);
+await writeFile(`${DIST}/feed.xml`, rssXml);
 
 console.log(`Built ${posts.length} blog posts`);
 console.log(`\nOutput: ${DIST}/`);
