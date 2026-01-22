@@ -299,10 +299,31 @@ export function parseMarkdown(md: string): string {
   return html.join("\n");
 }
 
+// Extract YouTube video ID from various URL formats
+function extractYouTubeId(url: string): string | null {
+  const patterns = [
+    /youtube\.com\/watch\?v=([^&]+)/,
+    /youtu\.be\/([^?]+)/,
+    /youtube\.com\/embed\/([^?]+)/,
+  ];
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) return match[1];
+  }
+  return null;
+}
+
 // Parse inline markdown (bold, italic, code, links, images)
 function parseInline(text: string): string {
   // Escape HTML first
   let result = esc(text);
+
+  // YouTube embeds: !youtube[caption](url)
+  result = result.replace(/!youtube\[([^\]]*)\]\(([^)]+)\)/g, (_, caption, url) => {
+    const videoId = extractYouTubeId(url);
+    if (!videoId) return `[Invalid YouTube URL: ${url}]`;
+    return `<div class="video-embed"><iframe src="https://www.youtube.com/embed/${videoId}" title="${caption}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`;
+  });
 
   // Images: ![alt](url)
   result = result.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">');

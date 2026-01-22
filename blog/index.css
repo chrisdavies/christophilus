@@ -168,6 +168,17 @@ img {
   border-radius: 8px;
 }
 
+.video-embed {
+  aspect-ratio: 16 / 9;
+  margin: 1.5rem 0;
+}
+
+.video-embed iframe {
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+}
+
 hr {
   border: none;
   border-top: 1px solid var(--bg-light);
