@@ -7,6 +7,29 @@
     <language>en-us</language>
     <atom:link href="https://christophilus.com/feed.xml" rel="self" type="application/rss+xml"/>
     <item>
+      <title>Why hasn't X given us a productivity boost?</title>
+      <link>https://christophilus.com/blog/ai-productivity.html</link>
+      <guid>https://christophilus.com/blog/ai-productivity.html</guid>
+      <pubDate>Sun, 22 Feb 2026 12:00:00 GMT</pubDate>
+      <description>&lt;h1&gt;Why hasn't X given us a productivity boost?&lt;/h1&gt;
+&lt;p&gt;I've heard this question many times through the years, where X is Windows, OOP, the internet, blockchain, agile, AI, etc.&lt;/p&gt;
+&lt;p&gt;Sometimes, the answer is that X is overrated. Sometimes it's that you're doing X wrong. Sometimes it's because you don't have an X-sized problem. For instance, most businesses didn't have a blockchain-sized problem.&lt;/p&gt;
+&lt;p&gt;The question I'm asked most often today is, &quot;Why hasn't AI lived up to the hype?&quot; There are a number of reasons. Today, I want to talk about one. And to do that, I'll focus on AI in the enterprise. And to do that, I want to first talk about agile.&lt;/p&gt;
+&lt;p&gt;I used to hear, &quot;We adopted agile, and things got &lt;em&gt;worse&lt;/em&gt;!&quot;&lt;/p&gt;
+&lt;p&gt;When people tell me, &quot;We adopted agile,&quot; what they almost always mean is, &quot;Management forced a daily standup on the entire engineering org without bothering to get buy-in from anyone.&quot;&lt;/p&gt;
+&lt;p&gt;Management forces their team into a new process without first thinking through the second-order effects.&lt;/p&gt;
+&lt;p&gt;Let's think about that 15 minute standup. You block out 15 minutes every morning, but it really lasts 30 minutes because Bill always rambles on and on while everyone's eyes glaze over. What is the true cost of that meeting? Well, when an engineer sees a meeting on their calendar, they think, &quot;I can't do any deep work for at least an hour ahead of that.&quot;&lt;/p&gt;
+&lt;p&gt;It takes time to get into deep work, so no one attempts it when they know they'll be interrupted by a meeting just as they're getting into their flow. Every meeting that lasts N minute probably costs you around N + 60 minutes of deep work. But there's also the post-meeting doledrums. I don't know any developer who leaves a standup energized and ready to dive into work. Instead, they take a break, reset and get into a good head-space. So, there's easily another 10-15 minute buffer following a standup. That 15 minute standup that last 30 minutes actually costs you closer to 100 minutes. Per day.&lt;/p&gt;
+&lt;p&gt;That's not &lt;em&gt;exactly&lt;/em&gt; accurate. I do work before the standup, but I don't do deep work. I do tedious work like reviewing GitHub issues, checking email, etc. This is work that I'd probably do at some point in my day, anyway, but the standup is &lt;em&gt;forcing&lt;/em&gt; me to do it at a time of day when I'm more capable of doing deep work-- rather than at the end of the day when my mind is better spent on shallower tasks. So, there's a real cost to that morning standup. The cost is fuzzy, and you can disagree with my numbers, but it's a real and recurring cost.&lt;/p&gt;
+&lt;p&gt;Let's be conservative and call the true cost of a standup 1 hour. That's 1/8th of your engineering hours wasted. The decision to adopt agile cost your engineering team 12% of their time budget.&lt;/p&gt;
+&lt;p&gt;A standup arguably has some value, but it's not worth 12% of your engineering costs.&lt;/p&gt;
+&lt;p&gt;But that's not the only problem. You're paying a bigger time penalty than you probably realize, but you're also paying a morale penalty. Forcing tedious, useless meetings on developers-- and in most organizations, for most of the engineers, standups are pretty useless. Maybe not 100% useless, but let's call it 80% useless. For mediocre engineering teams this isn't a huge deal. But &lt;em&gt;good&lt;/em&gt; engineering teams will resent this. The more time-wasting bureaucratic friction you add to your engineering org, the more likely you are to nudge your best engineers towards the exit, and the more likely you are to retain the mediocre engineers.&lt;/p&gt;
+&lt;p&gt;The point is, top-down decisions without buy-in happen all the time, and have plenty of second order effects and far-reaching consequences.&lt;/p&gt;
+&lt;p&gt;What does this have to do with AI? The same management mindset that forced their teams to use &quot;agile&quot; forces their teams to use AI. There are huge engineering orgs that have made AI usage as part of their employee evaluations-- not using AI enough? You're on an improvement plan. What are the second-order effects of this?&lt;/p&gt;
+&lt;p&gt;Resentment, active sabotage, ridiculous workarounds and gaming the system-- all sorts of second order effects. But, productivity? No. Not because AI is a useless or unproductive tool, but because &lt;em&gt;forcing&lt;/em&gt; AI into an org that doesn't want it, doesn't know how to use it, isn't optimized for it, and (often) actively resents it-- that will produce a lot of things, but it won't produce productivity.&lt;/p&gt;
+&lt;p&gt;Why hasn't AI given a measurable, objective performance boost to big enterprises? It's because the problems big enterprises have are not AI-shaped. They are cultural. And a broken culture is probably the hardest thing to mend.&lt;/p&gt;</description>
+    </item>
+    <item>
       <title>Preventing the Collapse of Civilization</title>
       <link>https://christophilus.com/blog/preventing-the-collapse-of-civilization.html</link>
       <guid>https://christophilus.com/blog/preventing-the-collapse-of-civilization.html</guid>
@@ -1476,61 +1499,6 @@ WantedBy=multi-user.target
 &lt;h2&gt;That's all, folks&lt;/h2&gt;
 &lt;p&gt;And that's it. A working Bun service running on a cheap Hetzner VPS, served over https.&lt;/p&gt;
 &lt;p&gt;Happy hacking.&lt;/p&gt;</description>
-    </item>
-    <item>
-      <title>Project structure</title>
-      <link>https://christophilus.com/blog/project-structure.html</link>
-      <guid>https://christophilus.com/blog/project-structure.html</guid>
-      <pubDate>Fri, 28 Jun 2024 12:00:00 GMT</pubDate>
-      <description>&lt;h1&gt;Project structure&lt;/h1&gt;
-&lt;p&gt;Occasionally on Hacker News, someone asks for codebases that demonstrate excellence. A few consistently top the list:&lt;/p&gt;
-&lt;ul&gt;&lt;li&gt;&lt;a href=&quot;https://www.sqlite.org/&quot;&gt;SQLite&lt;/a&gt;&lt;/li&gt;&lt;li&gt;&lt;a href=&quot;https://redict.io/&quot;&gt;Redict&lt;/a&gt;&lt;/li&gt;&lt;li&gt;&lt;a href=&quot;https://www.openbsd.org/&quot;&gt;OpenBSD&lt;/a&gt; (and other BSDs)&lt;/li&gt;&lt;li&gt;&lt;a href=&quot;https://www.postgresql.org/&quot;&gt;Postgres&lt;/a&gt;&lt;/li&gt;&lt;li&gt;&lt;a href=&quot;https://go.dev/&quot;&gt;Go&lt;/a&gt;&lt;/li&gt;&lt;/ul&gt;
-&lt;p&gt;I thought I'd do a quick analysis on these to see if there were any patterns.&lt;/p&gt;
-&lt;h2&gt;The problem space&lt;/h2&gt;
-&lt;p&gt;First, all but OpenBSD are developer tools. They all deal with well-understood inputs and outputs. Unlike most of my projects, these don't have to deal with vague business requirements, subjective UI decisions, or fad-churn. I'm not sure how much these projects can inform my typical project, but it's worth a look.&lt;/p&gt;
-&lt;h2&gt;Structure&lt;/h2&gt;
-&lt;p&gt;I pulled these (and a few other projects) down and ran an analysis of their directory structures:&lt;/p&gt;
-&lt;pre&gt;&lt;code class=&quot;lang-gen:table&quot;&gt;Project                 Avg depth     # Directories   # Files     # Files / Dir
-
-SQLite                  2.7           80              2308        28.9
-Busybox                 2.3           183             3011        16.5
-Redict                  3.0           106             1724        16.5
-OpenBSD (without Gnu)   3.8           3031            47495       15.7
-OpenBSD                 5.4           7245            99726       13.8
-Postgres                3.6           634             7619        12.0
-React                   3.8           553             7061        12.7
-Node                    5.6           4034            47649       11.8
-Go                      4.6           1485            14740       9.9
-Vue (Core)              3.1           111             804         7.2&lt;/code&gt;&lt;/pre&gt;
-&lt;p&gt;I have a bias for flat project structures, and this little experiment mostly reinforced that. I find it easier to get a quick sense of a project that has less nesting. More folders means more naming, and naming is hard. More folders means more choice. More choice means more decision-fatigue and opportunity for bikeshedding. When I add a new file, if the project structure is flat, it's trivial to answer, &quot;Where does this belong?&quot;.&lt;/p&gt;
-&lt;p&gt;There's no right or wrong here; just preference. But those are some of my reasons for preferring flat projects. I'm in decent company.&lt;/p&gt;
-&lt;h2&gt;Long functions&lt;/h2&gt;
-&lt;p&gt;I noticed that none of these projects shies away from long files and functions. For example, &lt;a href=&quot;https://github.com/golang/go/blob/master/src/time/format.go&quot;&gt;time/format.go&lt;/a&gt; has a 380 line function in it. There's much to be said for code-locality and code-linearity-- the ability to read top-down and be done, rather than having to jump all over various functions, files, and directories to follow the thread of logic.&lt;/p&gt;
-&lt;h2&gt;Simple languages&lt;/h2&gt;
-&lt;p&gt;The commonly recommended projects are all C or Go-- two low-abstraction languages with plenty of footguns and detractors. This is probably not coincidental. My suspicion (anecdotally informed by my own history with C and Go) is that their rudimentary nature forces the programmer to plan ahead.&lt;/p&gt;
-&lt;p&gt;I vaguely remember a study that found that test takers performed better when the test was difficult to read (due to fuzzy fonts, printing glitches, etc). A similar effect was found for listening-comprehension. People remembered more when they had to strain to understand the speaker. The idea was that added difficulty kicked the brain into a higher-gear, and that had spillover effects. I wonder if a similar effect happens with programming languages. There's no doubt that expressivity of a language influences the kinds of thoughts the speakers have. In this case, is it possible that the lack of expressivity is a constraint that forces the brain into a higher-gear, leading to better outcomes?&lt;/p&gt;
-&lt;p&gt;When I write in a high-level language like TypeScript, it's easy to just jump right in and get cranking. I can quickly toss an idea together with no forethought. When I write Go, I have to think first. It's a pain to do something like map / filter / reduce, so I have to think more about my data structures and the operations I'll take on them. I usually end up with a program that does less. My typical Go program creates far fewer copies than the equivalent TypeScript code, and it usually has fewer features and edge-cases because I eliminate them out of laziness.&lt;/p&gt;
-&lt;p&gt;Languages which make over-abstraction painful probably tend to be more readable in the long-run. I'd bet that the average Go codebase is more approachable than-- for example-- the average Scala codebase. You're far less likely to run into an architecture astronaut in Go than you are in TypeScript or Scala.&lt;/p&gt;
-&lt;p&gt;All of that said, there are plenty of terrible, messy C and Go codebases, so maybe there's nothing to this...&lt;/p&gt;
-&lt;h2&gt;Comments&lt;/h2&gt;
-&lt;p&gt;SQLite, Redict, and Go are well commented. In some cases, reading through &lt;a href=&quot;https://www.sqlite.org/src/file?name=src/resolve.c&amp;amp;ci=trunk&quot;&gt;a random file&lt;/a&gt; almost feels like you're reading a textbook on the related subject. Contrasting this with my nasty, under-commented code makes me feel like a slob. I'd guess that the practice of thorough commenting leads to more thorough thought and more robust implementations. It's another spillover effect.&lt;/p&gt;
-&lt;h2&gt;Just say no&lt;/h2&gt;
-&lt;p&gt;The top codebases here are clearly run by folks who can say no. They say no to feature creep. They say no to over-abstraction. They know their core problem. If it falls outside of that core, it doesn't make the cut.&lt;/p&gt;
-&lt;p&gt;For example, let's take a look at &lt;code&gt;cat&lt;/code&gt;:&lt;/p&gt;
-&lt;ul&gt;&lt;li&gt;&lt;a href=&quot;https://github.com/mirror/busybox/blob/master/coreutils/cat.c&quot;&gt;busybox&lt;/a&gt;&lt;/li&gt;&lt;li&gt;&lt;a href=&quot;https://github.com/openbsd/src/blob/master/bin/cat/cat.c&quot;&gt;OpenBSD&lt;/a&gt;&lt;/li&gt;&lt;li&gt;&lt;a href=&quot;https://github.com/coreutils/coreutils/blob/master/src/cat.c&quot;&gt;GNU coreutils&lt;/a&gt;&lt;/li&gt;&lt;/ul&gt;
-&lt;p&gt;I don't mean to throw shade on the GNU coreutils contributors. I use their stuff daily and am grateful to everyone involved! The busybox and OpenBSD projects have said &quot;no&quot; a lot more often than the coreutils projects have. I know which version I'd prefer to maintain!&lt;/p&gt;
-&lt;h2&gt;Surprises&lt;/h2&gt;
-&lt;p&gt;A few surprises, taken at random:&lt;/p&gt;
-&lt;p&gt;I was surprised to find that OpenBSD's source is sparsely commented.&lt;/p&gt;
-&lt;p&gt;The headline of the OpenBSD &lt;code&gt;src/gnu&lt;/code&gt; readme made me chuckle:&lt;/p&gt;
-&lt;blockquote&gt;&lt;p&gt;This directory contains software that is Gigantic and Nasty but Unavoidable.&lt;/p&gt;&lt;/blockquote&gt;
-&lt;p&gt;Busybox is nice. Really nice. It has clean, simple, and well-commented code organized in a shallow, flat folder structure. It should make the list the next time this topic comes up on HN.&lt;/p&gt;
-&lt;p&gt;Go was much more nested than I expected, and it is a counter example to my &lt;code&gt;flat=simple&lt;/code&gt; formula. Go's source is nice though-- consistently formatted (thanks, &lt;code&gt;gofmt&lt;/code&gt;!), well-commented, mostly straightforward.&lt;/p&gt;
-&lt;h2&gt;Conclusion&lt;/h2&gt;
-&lt;p&gt;If you made it this far, you'll realize this isn't a scientific analysis at all, but mostly fluff and me reinforcing my priors. I did change my mind about commenting, though. I usually see comments as an antipattern (and they often are). &quot;Focus on making your code readable rather than leaning on the crutch of commenting,&quot; I'd say. But the best of these projects have code that is both readable &lt;em&gt;and&lt;/em&gt; well commented. The comments are thoughtful and comforting, and make me more confident that I can hop in and make changes without missing some critical detail.&lt;/p&gt;
-&lt;p&gt;TL;DR;&lt;/p&gt;
-&lt;p&gt;There's no earth-shattering new insight here. The takeaways are uncontroversial, standard advice:&lt;/p&gt;
-&lt;ul&gt;&lt;li&gt;Flat project structure is nice-- try it&lt;/li&gt;&lt;li&gt;Code locality and linearity are underrated&lt;/li&gt;&lt;li&gt;Language constraints (and possibly, artificially imposed initial constraints) may help produce simpler, better solutions&lt;/li&gt;&lt;li&gt;It's worth honing good writing / commenting skills&lt;/li&gt;&lt;li&gt;Feature-creep is bad, mkay? Say no.&lt;/li&gt;&lt;/ul&gt;</description>
     </item>
   </channel>
 </rss>
